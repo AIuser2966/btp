@@ -26,8 +26,11 @@ def min_variance(rets: pd.DataFrame, lo=0.0, hi=1.0) -> np.ndarray:
 
 
 def max_sharpe(rets: pd.DataFrame, lo=0.0, hi=1.0, rf: float = 0.0) -> np.ndarray:
-    mu = rets.mean().values - rf / MONTHS
-    cov = rets.cov().values
+    return max_sharpe_mu(rets.mean().values - rf / MONTHS, rets.cov().values, lo, hi)
+
+
+def max_sharpe_mu(mu: np.ndarray, cov: np.ndarray, lo=0.0, hi=1.0) -> np.ndarray:
+    """Max-Sharpe weights for given expected (excess) returns and covariance."""
     return _solve(lambda w: -(w @ mu) / np.sqrt(w @ cov @ w), len(mu), lo, hi)
 
 

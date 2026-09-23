@@ -114,3 +114,19 @@ def load_yahoo(tickers: dict[str, str], start: str = "2005-01-01") -> pd.DataFra
     monthly = px.resample("ME").last()
     monthly.index = monthly.index.to_period("M")
     return monthly.pct_change().dropna()[list(tickers)]
+
+
+def load_macro(raw_dir: Path = RAW_DIR) -> pd.DataFrame:
+    """Month-end market indicators used as forecasting features.
+
+    * ``bond_yield`` – 10-year Treasury yield (decimal).
+    * ``div_yield``  – S&P 500 dividend yield (a valuation signal: high = cheap).
+    * ``usdinr``     – rupees per dollar (for rupee investors).
+    """
+    y = pd.read_csv(raw_dir / "us10y_yield.csv")
+    y.index = _to_month(y["Date"])
+    sp = pd.read_csv(raw_dir / "sp500_shiller.csv")
+    sp.index = _to_month(sp["Date"])
+    dy = (sp["Dividend"] / sp["SP500"]).replace(0.0, np.nan).ffill()
+    return pd.concat([(y["Rate"] / 100.0).rename("bond_yield"), dy.rename("div_yield"),
+                      usdinr(raw_dir).rename("usdinr")], axis=1)

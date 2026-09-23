@@ -598,7 +598,8 @@ In order, it:
 
 ## Part 9: The tests (`tests/test_sip.py`)
 
-15 automated checks, run with `python -m pytest -q`:
+18 automated checks, run with `python -m pytest -q` (the 3 forecasting tests are
+explained in `FORECASTING.md`):
 
 | Test | What it proves |
 |---|---|
@@ -635,3 +636,13 @@ In order, it:
 10. Result: less return than 100% equity (7.8% vs 11.3%), but a much smaller worst fall
     (−17% vs −48%), the best risk-adjusted score, never a losing 10-year SIP, and better
     than "optimize once" out of sample. A simple 1/3 split remains a tough benchmark.
+
+---
+
+## Part 11: The machine-learning extension
+
+A separate study (`sip/forecast.py`, `run_forecast.py`) tries to **predict next year's
+return** of each asset with Ridge regression, random forest and gradient boosting, then
+feeds the predictions into the optimizer. It's explained from the ground up, in the same
+style as this document, in **`FORECASTING.md`**. `recommend.py` turns the strategy into
+a monthly "what should I buy" tool.

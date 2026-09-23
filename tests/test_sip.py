@@ -113,3 +113,39 @@ def test_bundled_data_is_sane():
     assert 0.04 < ann["Bonds"] < 0.09
     inr = load_returns("INR")
     assert (((1 + inr).prod() ** (12 / len(inr)) - 1) > ann).all()   # rupee depreciated
+
+
+# ---------- forecasting ----------
+
+from sip import forecast as fc  # noqa: E402
+from sip.data import load_macro  # noqa: E402
+
+
+def test_targets_are_next_12_months():
+    rets = load_returns()
+    Y = fc.build_targets(rets)
+    j = 100
+    expected = (1 + rets.iloc[j + 1:j + 13]).prod() - 1
+    assert Y.iloc[j].values == pytest.approx(expected.values)
+    assert Y.iloc[-12:].isna().all().all() and Y.iloc[-13].notna().all()
+
+
+def test_forecasts_have_no_look_ahead():
+    rets = load_returns()
+    macro = load_macro()
+    f1, _ = fc.walk_forward_forecasts(fc.build_features(rets, macro),
+                                      fc.build_targets(rets), "Ridge")
+    shocked = rets.copy()
+    shocked.iloc[300:] = shocked.iloc[300:] * -3 + 0.05   # rewrite the future
+    f2, _ = fc.walk_forward_forecasts(fc.build_features(shocked, macro),
+                                      fc.build_targets(shocked), "Ridge")
+    pd.testing.assert_frame_equal(f1.iloc[:300], f2.iloc[:300])
+    assert not f1.iloc[300:].equals(f2.iloc[300:])
+
+
+def test_forecast_weights_are_valid():
+    rets = load_returns()
+    w = fc.forecast_weights(rets, fc.build_targets(rets, partial=True))
+    w = w.dropna()
+    assert np.allclose(w.sum(axis=1), 1.0)
+    assert (w.values >= 0.10 - 1e-6).all() and (w.values <= 0.70 + 1e-6).all()

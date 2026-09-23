@@ -188,6 +188,26 @@ The grey cloud shows every fixed mix over the full period. The Optimized SIP sit
 low-drawdown part of the upper edge, i.e. it is close to *efficient*. It reaches that
 position without hindsight, whereas the grey points need to know the future to pick.
 
+### 5.6 Machine-learning return forecasts (extension)
+
+Details are in `FORECASTING.md`. Ridge, random-forest and gradient-boosting models,
+trained walk-forward on 13 market features, forecast each asset's next-12-month return.
+The forecasts then replaced the trailing average in the max-Sharpe half of the
+Optimized SIP.
+
+| Strategy (USD) | XIRR | Sharpe | Sell turnover/yr |
+|---|---|---|---|
+| Optimized SIP | 7.8% | 1.42 | 4.7% |
+| + Ridge | 8.0% | 1.34 | 15.1% |
+| + Random forest | 7.3% | 1.33 | 14.0% |
+| + Gradient boosting | 7.2% | 1.28 | 14.2% |
+| + Oracle (perfect foresight) | 10.8% | 1.82 | 21.9% |
+
+Bond returns were partly predictable (out-of-sample R² up to +0.25). Equity and gold
+returns were not: all models were worse than the historical average. Perfect forecasts
+would add about 3 points of XIRR, but real models add at most 0.2 points, at three
+times the turnover. The simple Optimized SIP remains the recommendation.
+
 ## 6. Discussion: what the evidence says
 
 1. **Diversification is the big win.** Moving from 100% equity to any three-asset SIP
@@ -227,6 +247,7 @@ position without hindsight, whereas the grey points need to know the future to p
 
 ## 8. Possible extensions
 
+* ~~Machine-learning return forecasts~~: done, see §5.6 and `FORECASTING.md`.
 * A volatility-target or "risk-profile" version (conservative, moderate or aggressive)
   that maximizes return for a chosen risk budget.
 * Adding a cash/T-bill asset and computing a proper excess-return Sharpe.

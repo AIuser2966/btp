@@ -156,3 +156,83 @@ def _place_labels(fig, ax, points):
         else:
             boxes.append(ax.annotate(name, (x, y), xytext=(7, -3), textcoords="offset points",
                                      fontsize=9, color=INK).get_window_extent(renderer))
+
+
+MODEL_COLORS = {"Ridge": SERIES[0], "Random forest": SERIES[1],
+                "Gradient boosting": SERIES[2], "Trailing 10y mean": SERIES[3]}
+
+
+def forecast_r2_chart(ev: pd.DataFrame, path: Path):
+    """Out-of-sample R^2 of each model per asset (0 = no better than the historical mean)."""
+    _style()
+    ev = ev[ev["Model"].isin(MODEL_COLORS) & (ev["Asset"] != "Pick best asset")]
+    assets = list(dict.fromkeys(ev["Asset"]))
+    models = [m for m in MODEL_COLORS if m in set(ev["Model"])]
+    fig, ax = plt.subplots(figsize=(9, 4.8))
+    h = 0.8 / len(models)
+    for k, m in enumerate(models):
+        vals = [ev[(ev["Model"] == m) & (ev["Asset"] == a)]["OOS R2 vs hist mean"].iloc[0]
+                for a in assets]
+        ys = [i + (k - (len(models) - 1) / 2) * h for i in range(len(assets))]
+        ax.barh(ys, vals, height=h * 0.9, color=MODEL_COLORS[m], label=m,
+                edgecolor=SURFACE, linewidth=1)
+        for y, v in zip(ys, vals):
+            ax.annotate(f"{v:+.2f}", (v, y), xytext=(4 if v >= 0 else -4, 0),
+                        textcoords="offset points", va="center",
+                        ha="left" if v >= 0 else "right", fontsize=8, color=INK_2)
+    ax.axvline(0, color=INK, lw=1)
+    ax.set_yticks(range(len(assets)), assets)
+    ax.invert_yaxis()
+    ax.set_xlabel("Out-of-sample R² vs historical mean (right of 0 = better forecast)")
+    ax.set_title("Can models predict next-12-month returns?")
+    ax.legend(loc="lower left", fontsize=9)
+    ax.grid(axis="y", visible=False)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def forecast_vs_actual_chart(forecasts: dict, actual: pd.DataFrame, path: Path,
+                             models=("Ridge", "Random forest")):
+    _style()
+    assets = list(actual.columns)
+    fig, axes = plt.subplots(len(assets), 1, figsize=(10, 2.6 * len(assets)), sharex=True)
+    for ax, a in zip(axes, assets):
+        y = actual[a].dropna()
+        ax.plot(_ts(y.index), y, color=INK, lw=1.4, label="Actual next-12m return")
+        hm = forecasts["Historical mean"][a].reindex(y.index)
+        ax.plot(_ts(y.index), hm, color=MUTED, lw=1.4, ls="--", label="Historical mean")
+        for m in models:
+            f = forecasts[m][a].reindex(y.index)
+            ax.plot(_ts(y.index), f, color=MODEL_COLORS[m], lw=1.4, label=m)
+        ax.axhline(0, color=GRID, lw=1)
+        ax.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+        ax.set_title(a, fontsize=11)
+    axes[0].legend(loc="upper right", ncol=4, fontsize=8)
+    fig.suptitle("Forecast vs what actually happened (walk-forward, out of sample)",
+                 x=0.01, ha="left", fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def importance_chart(imp: pd.DataFrame, path: Path, model: str):
+    """Average feature importance over all yearly re-fits, one panel per asset."""
+    _style()
+    assets = list(dict.fromkeys(imp["asset"]))
+    feats = [c for c in imp.columns if c not in ("refit", "asset")]
+    fig, axes = plt.subplots(1, len(assets), figsize=(12, 4.6), sharey=True)
+    for ax, a in zip(axes, assets):
+        v = imp[imp["asset"] == a][feats].mean()
+        ax.barh(range(len(feats)), v.values, color=MODEL_COLORS.get(model, SERIES[0]),
+                height=0.7)
+        ax.set_yticks(range(len(feats)), feats)
+        ax.invert_yaxis()
+        ax.set_title(f"Predicting {a}", fontsize=11)
+        ax.xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+        ax.grid(axis="y", visible=False)
+    fig.suptitle(f"{model}: which inputs mattered most (average over yearly re-fits)",
+                 x=0.01, ha="left", fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)

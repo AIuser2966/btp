@@ -8,7 +8,8 @@ static 60/20/20 portfolio.
 
 **The full explanation of the method, the results and their limitations is in
 [`docs/REPORT.md`](docs/REPORT.md).** For a from-scratch walkthrough of every formula and
-file, see [`docs/EXPLAINED.md`](docs/EXPLAINED.md).
+file, see [`docs/EXPLAINED.md`](docs/EXPLAINED.md). The machine-learning extension
+(forecasting future returns) is in [`docs/FORECASTING.md`](docs/FORECASTING.md).
 
 ## Quick start
 
@@ -16,7 +17,9 @@ file, see [`docs/EXPLAINED.md`](docs/EXPLAINED.md).
 pip install -r requirements.txt
 python run_backtest.py                 # USD investor  -> results/usd/
 python run_backtest.py --currency INR  # rupee SIP     -> results/inr/
-python -m pytest -q                    # 15 unit tests
+python run_forecast.py                 # ML forecasting study -> results/usd/forecast/
+python recommend.py --currency INR --amount 10000   # this month's split
+python -m pytest -q                    # 18 unit tests
 ```
 
 Useful options: `--amount 5000`, `--step-up 0.10` (raise the SIP 10% every year),
@@ -52,6 +55,13 @@ the data and keeping it for the second half (8.0% vs 6.4% XIRR out of sample). A
 1/3 split is a strong benchmark, as the finance literature on "1/N" portfolios predicts.
 `docs/REPORT.md` covers this honestly.
 
+**Machine-learning extension.** Ridge regression, random forest and gradient boosting
+models were trained walk-forward to forecast each asset's next-12-month return. They can
+predict bonds (out-of-sample R² up to +0.25) but not equity or gold, where they are worse
+than the historical average. Plugged into the optimizer, only Ridge helps, and only
+slightly (XIRR 8.0% vs 7.8%, with three times the selling). A perfect-foresight oracle
+would reach 10.8%. See `docs/FORECASTING.md`.
+
 ## Project layout
 
 ```
@@ -62,10 +72,15 @@ sip/engine.py        month-by-month SIP simulator (instalments, smart split, reb
 sip/strategies.py    the six strategies compared
 sip/metrics.py       XIRR, CAGR, volatility, Sharpe, Sortino, drawdowns, turnover
 sip/analysis.py      rolling windows, static-mix grid search, train/test split, sensitivity, crises
+sip/forecast.py      ML forecasts (features, walk-forward training, accuracy, forecast-driven weights)
 sip/plots.py         charts
-run_backtest.py      runs everything and writes results/<currency>/
-tests/test_sip.py    unit tests (XIRR, engine, optimizers, no look-ahead, data sanity)
+run_backtest.py      runs the main study and writes results/<currency>/
+run_forecast.py      runs the ML study and writes results/<currency>/forecast/
+recommend.py         prints this month's target split and what to buy
+tests/test_sip.py    unit tests (XIRR, engine, optimizers, no look-ahead, forecasts, data sanity)
 docs/REPORT.md       the write-up
+docs/EXPLAINED.md    ground-up explanation of every part
+docs/FORECASTING.md  the machine-learning study
 ```
 
 ## Using Indian market data

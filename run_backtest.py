@@ -31,6 +31,8 @@ def fmt(df: pd.DataFrame, index: bool = True) -> str:
             out[c] = out[c].map(lambda v: f"{v:,.0f}")
         elif c in RATIO_COLS:
             out[c] = out[c].map(lambda v: f"{v:.2f}")
+        elif c == "Annual cost drag":
+            out[c] = out[c].map(lambda v: f"{v:.2%}")
         else:
             out[c] = out[c].map(lambda v: f"{v:.1%}")
     return out.to_markdown(index=index)
