@@ -70,7 +70,7 @@ genuinely multi-asset.
 
 ### 3.3 Walk-forward: why this is a fair back-test
 
-The weights are re-fitted every January using the **previous 120 months only**
+The weights are re-fitted every 12 months (each February) using the **previous 120 months only**
 (`walk_forward_weights`). A unit test (`test_walk_forward_has_no_look_ahead`) checks this:
 it corrupts all data after month 200 and confirms that the weights before month 200
 do not change. Many student back-tests quietly optimize over the whole period; §5.3 shows

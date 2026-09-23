@@ -7,7 +7,8 @@ data it is compared with the usual alternatives: 100% equity, a naive 1/3 split 
 static 60/20/20 portfolio.
 
 **The full explanation of the method, the results and their limitations is in
-[`docs/REPORT.md`](docs/REPORT.md).**
+[`docs/REPORT.md`](docs/REPORT.md).** For a from-scratch walkthrough of every formula and
+file, see [`docs/EXPLAINED.md`](docs/EXPLAINED.md).
 
 ## Quick start
 
@@ -26,7 +27,8 @@ Each run writes `results.md` (all tables), CSVs and five charts:
 
 ## The proposed "Optimized SIP" in one paragraph
 
-Every January, fit two optimizers on the **previous 10 years** of monthly returns:
+Every 12 months (each February, because the data starts in Feb 1973), fit two optimizers
+on the **previous 10 years** of monthly returns:
 *risk parity* (each asset contributes equal risk) and *maximum Sharpe ratio*. Each
 optimizer is limited to 10–70% per asset. Average the two sets of weights; that average
 is the target for the year. Each month, invest the SIP instalment in whichever assets are
@@ -78,5 +80,5 @@ rets = load_yahoo({"Equity": "NIFTYBEES.NS", "Bonds": "LTGILTBEES.NS", "Gold": "
 ```
 
 Then pass `rets` to `build_strategies` / `run_sip` in the same way as `run_backtest.py`
-does. These ETFs only have about 10–15 years of history, so use `--lookback 36` or
-`--lookback 60`.
+does. These ETFs only have about 10–15 years of history, so pass a shorter look-back
+(`lookback=36` or `60`) to `build_strategies`.
