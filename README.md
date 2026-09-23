@@ -11,6 +11,12 @@ static 60/20/20 portfolio.
 file, see [`docs/EXPLAINED.md`](docs/EXPLAINED.md). The machine-learning extension
 (forecasting future returns) is in [`docs/FORECASTING.md`](docs/FORECASTING.md).
 
+## Architecture
+
+![Architecture and formulas](docs/architecture.png)
+
+Vector versions for the report: [`docs/architecture.pdf`](docs/architecture.pdf), [`docs/architecture.svg`](docs/architecture.svg) (regenerate with `python docs/make_architecture.py`).
+
 ## Quick start
 
 ```bash

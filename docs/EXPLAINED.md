@@ -34,6 +34,12 @@ That is called a **backtest**.
 
 ### 1.1 The pipeline
 
+The full diagram, with every formula at the step where it's used:
+
+![Architecture and formulas](architecture.png)
+
+A simpler text version of the same flow:
+
 ```mermaid
 flowchart LR
     A["data/raw/*.csv<br/>(prices, yields, FX)"] --> B["sip/data.py<br/>monthly returns"]
