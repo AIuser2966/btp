@@ -1,0 +1,137 @@
+"""Robustness checks: rolling SIP windows, in-sample grid search, train/test split."""
+
+from __future__ import annotations
+
+import pandas as pd
+
+from .engine import Strategy, contribution_schedule, run_sip
+from .metrics import max_drawdown, sip_xirr, summarise
+from .optimize import fixed_weights, weight_grid
+
+
+def rolling_windows(returns: pd.DataFrame, strategies: list[Strategy], start: str,
+                    years: int = 10, step: int = 1, amount: float = 10_000.0,
+                    cost_bps: float = 10.0) -> pd.DataFrame:
+    """XIRR and worst wealth drop of every ``years``-long SIP starting each ``step`` months."""
+    idx = returns.loc[start:].index
+    n = years * 12
+    rows = []
+    for i in range(0, len(idx) - n + 1, step):
+        window = idx[i:i + n]
+        contrib = contribution_schedule(window, amount)
+        for s in strategies:
+            res = run_sip(returns, s, contrib, cost_bps)
+            rows.append({"start": window[0], "Strategy": s.name,
+                         "XIRR": sip_xirr(res),
+                         "Worst wealth drop": max_drawdown(res.total)})
+    return pd.DataFrame(rows)
+
+
+def rolling_summary(roll: pd.DataFrame, benchmark: str = "Equity SIP") -> pd.DataFrame:
+    xirr = roll.pivot(index="start", columns="Strategy", values="XIRR")
+    dd = roll.pivot(index="start", columns="Strategy", values="Worst wealth drop")
+    order = list(dict.fromkeys(roll["Strategy"]))
+    out = pd.DataFrame({
+        "Windows": xirr.count(),
+        "Median XIRR": xirr.median(),
+        "5th pct XIRR": xirr.quantile(0.05),
+        "Worst XIRR": xirr.min(),
+        "Best XIRR": xirr.max(),
+        "XIRR std": xirr.std(),
+        "% windows XIRR < 0": (xirr < 0).mean(),
+        f"% windows beating {benchmark}": xirr.gt(xirr[benchmark], axis=0).mean(),
+        "Median worst drop": dd.median(),
+        "Worst drop (any window)": dd.min(),
+    })
+    return out.loc[order]
+
+
+def static_grid(returns: pd.DataFrame, contrib: pd.Series, step: float = 0.10,
+                cost_bps: float = 10.0) -> pd.DataFrame:
+    """Every static mix on a grid, bought with pro-rata instalments + annual rebalancing."""
+    rows = []
+    for w in weight_grid(list(returns.columns), step):
+        s = Strategy(str(w), fixed_weights(contrib.index, w), rebalance="calendar")
+        m = summarise(run_sip(returns, s, contrib, cost_bps))
+        rows.append({**w, **{k: m[k] for k in
+                             ("XIRR", "Volatility", "Sharpe", "Max drawdown",
+                              "Worst wealth drop")}})
+    return pd.DataFrame(rows)
+
+
+def best_static(grid: pd.DataFrame, assets: list[str], objective: str = "Sharpe") -> dict:
+    row = grid.loc[grid[objective].idxmax()]
+    return {a: float(row[a]) for a in assets}
+
+
+def train_test_split(returns: pd.DataFrame, strategies: list[Strategy],
+                     train: tuple[str, str], test: tuple[str, str],
+                     amount: float = 10_000.0, cost_bps: float = 10.0):
+    """Pick the best static mix on the training SIP, then compare everyone on the test SIP.
+
+    The static mix is the classic "optimise on history, hope it holds" approach; the
+    walk-forward strategies re-estimate continuously using only past data.
+    """
+    assets = list(returns.columns)
+    train_idx = returns.loc[train[0]:train[1]].index
+    test_idx = returns.loc[test[0]:test[1]].index
+    grid = static_grid(returns, contribution_schedule(train_idx, amount), cost_bps=cost_bps)
+    w_star = best_static(grid, assets)
+    tuned = Strategy("Best static (train-tuned)", fixed_weights(returns.index, w_star),
+                     rebalance="calendar",
+                     description=f"Grid-search max-Sharpe mix on {train[0]}..{train[1]}: {w_star}")
+    contrib = contribution_schedule(test_idx, amount)
+    results = [run_sip(returns, s, contrib, cost_bps) for s in [*strategies, tuned]]
+    return w_star, results
+
+
+def calendar_year_returns(results) -> pd.DataFrame:
+    twr = pd.concat([r.twr for r in results], axis=1)
+    return twr.groupby(twr.index.year).apply(lambda g: (1 + g).prod() - 1)
+
+
+def crisis_table(results, periods: dict[str, tuple[str, str]]) -> pd.DataFrame:
+    """Cumulative time-weighted return of each strategy through named stress periods."""
+    rows = {}
+    for label, (a, b) in periods.items():
+        rows[label] = {r.name: float((1 + r.twr.loc[a:b]).prod() - 1) for r in results}
+    return pd.DataFrame(rows).T
+
+
+CRISES = {
+    "1987 crash (Sep-Nov 1987)": ("1987-09", "1987-11"),
+    "Dot-com bust (Sep 2000-Sep 2002)": ("2000-09", "2002-09"),
+    "Global financial crisis (Nov 2007-Feb 2009)": ("2007-11", "2009-02"),
+    "COVID crash (Feb-Mar 2020)": ("2020-02", "2020-03"),
+    "2022 rate shock (Jan-Sep 2022)": ("2022-01", "2022-09"),
+}
+
+
+
+def sensitivity(returns: pd.DataFrame, contrib: pd.Series, lookbacks=(60, 120, 180),
+                bands=(0.03, 0.05, 0.10), cost_bps: float = 10.0) -> pd.DataFrame:
+    """Optimized SIP under other look-backs / bands, plus an ablation of the smart instalments.
+
+    All variants run over the months where the longest look-back has enough history.
+    """
+    from .optimize import walk_forward_weights
+
+    targets = {lb: (walk_forward_weights(returns, "risk_parity", lb)
+                    + walk_forward_weights(returns, "max_sharpe", lb)) / 2
+               for lb in lookbacks}
+    # Compare every variant over the same months: those where the longest look-back is ready.
+    start = max(t.dropna().index[0] for t in targets.values())
+    contrib = contrib.loc[max(start, contrib.index[0]):]
+    rows = []
+    for lb, target in targets.items():
+        variants = [(f"band {b:.0%}", "smart", "band", b) for b in bands]
+        variants += [("pro-rata + annual rebal", "pro_rata", "calendar", 0.0),
+                     ("smart, never rebalance", "smart", "none", 0.0)]
+        for label, contribution, rebalance, band in variants:
+            s = Strategy(label, target, contribution=contribution, rebalance=rebalance,
+                         band=band)
+            m = summarise(run_sip(returns, s, contrib, cost_bps))
+            rows.append({"Look-back (months)": lb, "Execution": label,
+                         **{k: m[k] for k in ("XIRR", "Volatility", "Sharpe",
+                                              "Worst wealth drop", "Annual sell turnover")}})
+    return pd.DataFrame(rows).set_index(["Look-back (months)", "Execution"])
