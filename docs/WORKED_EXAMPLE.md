@@ -305,9 +305,9 @@ For you, investing 10,000 a month from 1983 to 2026:
   have watched the account fall almost **in half**, including losing 7 M in 2008, and in
   3% of 10-year periods you'd have ended with less than you put in.
 - **The Optimized SIP** made less (40.7 M, 7.8% a year), but its worst fall was only
-  **17%**. It went *up* during 2008, never lost money over any 10-year period, and had the
-  **best return per unit of risk** of the strategies you could actually have followed at
-  the time.
+  **17%**. It went *up* during 2008, never lost money over any 10-year period, and had one of the
+  **best returns per unit of risk** (Sharpe 1.42; risk parity alone was marginally
+  higher at 1.44).
 - **Honest caveat:** a plain ⅓-each split made more (58.5 M, 9.0%) with a similar worst
   fall (18%). Simple diversification is a very strong benchmark; the finance research
   says the same.

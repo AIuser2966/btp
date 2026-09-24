@@ -640,7 +640,8 @@ explained in `FORECASTING.md`):
 9. We repeat the test 403 times with different start dates, on a train/test split, with
    different settings, and through five crises.
 10. Result: less return than 100% equity (7.8% vs 11.3%), but a much smaller worst fall
-    (−17% vs −48%), the best risk-adjusted score, never a losing 10-year SIP, and better
+    (−17% vs −48%), a top risk-adjusted score (Sharpe 1.42, just behind risk parity's
+    1.44), never a losing 10-year SIP, and better
     than "optimize once" out of sample. A simple 1/3 split remains a tough benchmark.
 
 ---

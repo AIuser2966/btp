@@ -213,9 +213,11 @@ times the turnover. The simple Optimized SIP remains the recommendation.
 1. **Diversification is the big win.** Moving from 100% equity to any three-asset SIP
    cuts the worst account fall from about 48% to about 17–23% and removes negative
    10-year outcomes.
-2. **Optimization buys risk efficiency, not extra return.** The Optimized SIP has the
-   best Sharpe of the strategies you could actually have run in real time, and the
-   smallest drawdowns. Its absolute XIRR is lower because the optimizer, looking at
+2. **Optimization buys risk efficiency, not extra return.** The three optimizer-based SIPs
+   (risk parity, max Sharpe and their blend) have the highest Sharpe ratios (1.37–1.44)
+   and the smallest drawdowns (about −16% to −17%). Risk parity alone is marginally the
+   best on risk (Sharpe 1.44 vs 1.42 for the blend); the blend earns slightly more (7.8%
+   vs 7.7%) and trades less than max Sharpe. Its absolute XIRR is lower because the optimizer, looking at
    volatility, holds a lot of bonds (about 50%; see `weights.png`).
 3. **A naive 1/3 split is hard to beat.** Equal-weight earned 1.2 points more XIRR at a
    slightly higher drawdown. This matches DeMiguel, Garlappi & Uppal (2009): estimation
