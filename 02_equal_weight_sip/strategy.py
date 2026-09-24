@@ -1,6 +1,6 @@
 """Strategy 2: Equal-weight SIP (1/3 each). The "no brain" diversified benchmark.
 
-Rule: every month, split the instalment equally, 1/3 each into equity, bonds and gold.
+Rule: every month, split the instalment equally, 1/3 each into Nifty, gold and liquid.
 Nothing is ever sold, so over time the portfolio drifts toward whatever grew fastest.
 
     python 02_equal_weight_sip/strategy.py
@@ -18,7 +18,7 @@ from sip.report import LOOKBACK, run_strategy_folder  # noqa: E402
 
 NAME = "Equal-weight SIP"
 COLOUR = "#eb6834"
-WEIGHTS = {"Equity": 1 / 3, "Bonds": 1 / 3, "Gold": 1 / 3}
+WEIGHTS = {"Nifty": 1 / 3, "Gold": 1 / 3, "Liquid": 1 / 3}
 
 
 def build(returns, lookback: int = LOOKBACK) -> Strategy:

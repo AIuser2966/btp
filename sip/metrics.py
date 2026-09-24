@@ -35,7 +35,7 @@ def max_drawdown(series: pd.Series) -> float:
     return float((series / peak - 1.0).min())
 
 
-def summarise(res: SIPResult, rf: float = 0.0) -> dict:
+def summarise(res: SIPResult, rf: float = 0.0, rf_returns: pd.Series | None = None) -> dict:
     r = res.twr
     ann_ret = (1.0 + r).prod() ** (MONTHS / len(r)) - 1.0
     ann_vol = r.std() * np.sqrt(MONTHS)
@@ -45,7 +45,7 @@ def summarise(res: SIPResult, rf: float = 0.0) -> dict:
     mdd = max_drawdown(growth)
     invested = res.contributions.sum()
     final = res.total.iloc[-1]
-    return {
+    out = {
         "Strategy": res.name,
         "Invested": invested,
         "Final value": final,
@@ -54,9 +54,9 @@ def summarise(res: SIPResult, rf: float = 0.0) -> dict:
         "TWR CAGR": ann_ret,
         "Volatility": ann_vol,
         "Sharpe": excess.mean() * MONTHS / ann_vol,
-        "Sortino": excess.mean() * MONTHS / downside,
+        "Sortino": excess.mean() * MONTHS / downside if downside > 0 else np.nan,
         "Max drawdown": mdd,
-        "Calmar": ann_ret / abs(mdd),
+        "Calmar": ann_ret / abs(mdd) if mdd < 0 else np.nan,
         # Largest fall in rupee/dollar wealth an investor actually saw in the account
         "Worst wealth drop": max_drawdown(res.total),
         # Share of the average portfolio sold per year (a proxy for capital-gains tax events)
@@ -64,7 +64,14 @@ def summarise(res: SIPResult, rf: float = 0.0) -> dict:
         # Trading costs as a yearly drag on the average portfolio
         "Annual cost drag": res.costs.sum() / res.total.mean() / (len(r) / MONTHS),
     }
+    if rf_returns is not None:
+        # Sharpe measured against a real risk-free asset (the Liquid / 91-day T-bill index):
+        # only the return EARNED ABOVE that asset counts.
+        excess_vs_rf = r - rf_returns.reindex(r.index)
+        out["Sharpe vs Liquid"] = excess_vs_rf.mean() * MONTHS / ann_vol
+    return out
 
 
-def summary_table(results: list[SIPResult], rf: float = 0.0) -> pd.DataFrame:
-    return pd.DataFrame([summarise(r, rf) for r in results]).set_index("Strategy")
+def summary_table(results: list[SIPResult], rf: float = 0.0,
+                  rf_returns: pd.Series | None = None) -> pd.DataFrame:
+    return pd.DataFrame([summarise(r, rf, rf_returns) for r in results]).set_index("Strategy")

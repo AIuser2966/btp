@@ -1,9 +1,9 @@
-"""Strategy 1: Equity SIP (100% stocks). The benchmark most people follow.
+"""Strategy 1: Equity SIP (100% Nifty 50). The benchmark most people follow.
 
-Rule: every month, put the whole instalment into equity (S&P 500 with dividends).
+Rule: every month, put the whole instalment into equity (Nifty 50, dividends included).
 Nothing is ever sold or rebalanced.
 
-    python 01_equity_sip/strategy.py      ->  results/usd/, results/inr/
+    python 01_equity_sip/strategy.py      ->  results/
 """
 
 import sys
@@ -18,14 +18,14 @@ from sip.report import LOOKBACK, run_strategy_folder  # noqa: E402
 
 NAME = "Equity SIP"
 COLOUR = "#2a78d6"
-WEIGHTS = {"Equity": 1.0, "Bonds": 0.0, "Gold": 0.0}
+WEIGHTS = {"Nifty": 1.0, "Gold": 0.0, "Liquid": 0.0}
 
 
 def build(returns, lookback: int = LOOKBACK) -> Strategy:
     # Same target every month: 100 / 0 / 0.
     target = fixed_weights(returns.index, WEIGHTS)
     return Strategy(NAME, target, contribution="pro_rata", rebalance="none",
-                    description="100% equity, never rebalanced.")
+                    description="100% Nifty, never rebalanced.")
 
 
 if __name__ == "__main__":

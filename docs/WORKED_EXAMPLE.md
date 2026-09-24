@@ -1,317 +1,522 @@
-# Layer 1 in 20 Steps: One Investor, Real Numbers
+# Layer 1 in 20 Steps: One Investor, Real Numbers (Nifty 50 / Gold / Liquid)
 
-**The example:** *you* start a SIP of **10,000 a month in February 1983** and keep it
-going every month until **July 2026**. That's 522 instalments, **5,220,000 invested** in
-total. All numbers below are the project's actual outputs (the USD data series; the
-rupee version gives different figures but works the same way).
+**The example:** *you* start a SIP of **₹10,000 a month in February 2010** and keep it going
+every month until **December 2019**: 119 instalments, **₹1,190,000 invested**.
+You follow the **Optimized SIP** (strategy 6). Every number below is the project's actual
+output; every formula shows what each term means, a Feb 2010 example and the line of code.
 
 ---
 
-## Part A: Getting the data ready
+## Part A: Getting the data ready (folder `00_raw_data/`)
 
-### Step 1: Define the question
-You could put all 10,000 into a stock fund every month, or spread it across stocks,
-bonds and gold. The project asks: **is there a simple rule for splitting the 10,000
-that gives you a better balance of growth and safety than an all-stock SIP or a fixed
-mix like 60/20/20?**
+### Step 1: The question
+You could put all ₹10,000 into a Nifty fund every month, or split it across Nifty, gold and a
+liquid fund. **Is there a simple rule for splitting it that balances growth and safety better
+than 100% Nifty or a fixed mix like 60/20/20?** We replay 2010–2019 month by month (a backtest).
 
-To answer it, we replay history: we pretend you followed each rule from 1983 to 2026
-and see what would have happened to your money. This is called a **backtest**.
-
-### Step 2: Choose the three assets
+### Step 2: The three assets
 | Asset | What it is | Its personality |
 |---|---|---|
-| Equity | US S&P 500 (500 big companies) | Grows fastest, but crashes hard |
-| Bonds | US 10-year government bonds | Slow and steady; pays interest |
-| Gold | Gold price | Moves on its own, often rises in panics |
+| Nifty 50 | India's 50 largest companies | Grows fastest, falls hardest |
+| Gold | Gold, priced in rupees | Rises when the rupee falls or markets panic |
+| Liquid | A liquid fund earning the 91-day T-bill rate | Almost never falls; grows steadily |
 
-They were chosen because they **don't move together**. Over 1973–1983 the correlations
-were: equity–bonds 0.28, equity–gold 0.16, bonds–gold −0.03 (1 = move identically,
-0 = unrelated). When one falls, the others often don't, and that's what protects you.
+### Steps 3–6: From daily prices to monthly rupee returns
 
-### Step 3: Collect the raw data (1973–2026, monthly)
-Here's what the files contain for your first two months:
 
-| Month | S&P 500 price | Annual dividend | 10-yr bond yield | Gold ($/oz) | ₹ per $ |
-|---|---|---|---|---|---|
-| Jan 1983 | 144.30 | 6.883 | 10.46% | 481 | 9.79 |
-| Feb 1983 | 146.80 | 6.897 | 10.72% | 491 | 9.92 |
+The SIP invests once a month, so each series is sampled at **month end**, then turned into
+a return (the growth of ₹1 over the month).
 
-These are stored in `00_raw_data/raw/`, so anyone can rerun the project and get identical
-numbers.
+**Month-end value**
 
-### Step 4: Turn prices into monthly returns (equity and gold)
-A **return** is "how much did 1 unit of money grow this month?"
+```
+X_month = last available daily value of X in that calendar month
+```
 
-**Equity, Feb 1983.** You gain from the price rising **and** from the dividend. The
-dividend is given per year, so one month's share is 6.883 / 12 = 0.574:
+| Term | What it stands for |
+|---|---|
+| `X` | any daily series (Nifty, Gold, Liquid, USD/INR) |
+| `X_month` | the value used for that month |
 
-$$r = \frac{146.80 + 0.574}{144.30} - 1 = \frac{147.374}{144.30} - 1 = +2.13\%$$
+**Example:** Feb 2010: Nifty 4,922.30, Gold $1,118.9, USD/INR 46.05, Liquid 188.1263 (Jan 2010: 4,882.05, $1,083.8, 46.08, 187.5356).
 
-**Gold, Feb 1983.** No dividend, just the price change:
+**Code:** [`sip/data.py` line 48](../sip/data.py#L48): `out = series.dropna().resample("ME").last()`
 
-$$r = \frac{491}{481} - 1 = +2.08\%$$
+**Nifty 50 total return (price + dividends)**
 
-### Step 5: Build the bond return from interest rates
-We only have the interest rate (yield), not a bond fund price, so we simulate one:
+```
+r_Nifty,t = P_t / P_(t−1) − 1 + dy / 12
+```
 
-1. On 1 Feb you "buy" a new 10-year bond for 1.00 that pays **10.46% a year** (January's
-   yield).
-2. By the end of February, new bonds pay **10.72%**. Your bond pays less than new ones,
-   so it's worth less. Using the bond price formula with 9 years 11 months left, its
-   price is now **0.9844**, a loss of **−1.56%**.
-3. But you also earned one month of interest: 10.46% / 12 = **+0.87%**.
-4. February bond return = −1.56% + 0.87% = **−0.69%**.
+| Term | What it stands for |
+|---|---|
+| `P_t` | Nifty 50 month-end close this month |
+| `P_(t−1)` | Nifty 50 month-end close last month |
+| `dy` | Nifty dividend yield per year = 1.3% (assumption, see below) |
+| `dy / 12` | one month of dividends |
 
-This is why bonds can lose money when interest rates rise, as they did in 2022.
+**Example:** Feb 2010: 4,922.30 / 4,882.05 − 1 + 0.013 / 12 = +0.824% + +0.108% = **+0.933%**.
 
-### Step 6: Put it in one table (and optionally convert to rupees)
-Doing Steps 4–5 for every month gives a table of **642 months × 3 assets**. Its first
-row is:
+**Code:** [`sip/data.py` line 57](../sip/data.py#L57): `ret = price / price.shift(1) - 1 + dividend_yield / 12`
 
-| Month | Equity | Bonds | Gold |
-|---|---|---|---|
-| Feb 1983 | +2.13% | −0.69% | +2.08% |
+**Why add dividends?** An index fund investor receives the dividends of the 50 companies
+(reinvested in the fund). The price index leaves them out, which would understate Nifty by
+about 1–2% a year. NSE publishes a separate Total Return Index, but no source reachable from
+this project had its history, so a constant **1.3%** a year is added. The
+Nifty 50 dividend yield has historically been **1–2%** (1.35% in the May 2026 NSE factsheet;
+[Bajaj AMC](https://www.bajajamc.com/knowledge-centre/nifty-50-dividend-yield)). It is one
+constant in `sip/data.py` (`NIFTY_DIVIDEND_YIELD`) and easy to change.
 
-**Rupee version:** the dollar rose from ₹9.79 to ₹9.92 (+1.27%) that month, so for an
-Indian investor, equity earned (1.0213 × 1.0127) − 1 = **+3.43%**.
+**Gold in rupees**
 
----
+```
+G_INR,t = G_USD,t × FX_t
+```
 
-## Part B: Deciding how to split your 10,000
+| Term | What it stands for |
+|---|---|
+| `G_USD,t` | gold price in US dollars per ounce at month end |
+| `FX_t` | rupees per US dollar at month end |
+| `G_INR,t` | gold price in rupees per ounce |
 
-### Step 7: Look only at the past, the last 10 years
-It's 1 Feb 1983 and you need to decide your split. The rule is that you may only use
-data you'd actually have had: the **120 months from Feb 1973 to Jan 1983**. Nothing
-from February 1983 onwards is allowed. This "no peeking" rule is what makes the
-backtest honest.
+**Example:** Feb 2010: $1,118.9 × 46.05 = **₹51,525.35** per ounce (Jan 2010: $1,083.8 × 46.08 = ₹49,941.50).
 
-### Step 8: Measure each asset's return and risk over that window
-| (Feb 1973 – Jan 1983) | Average return/yr (μ) | Volatility/yr (σ) |
-|---|---|---|
-| Equity | 7.6% | 14.1% |
-| Bonds | 7.0% | 9.0% |
-| Gold | **24.2%** | **29.5%** |
+**Code:** [`sip/data.py` line 65](../sip/data.py#L65): `return (gold_usd * fx).rename("Gold")`
 
-That was the 1970s: gold boomed (from about $65 to $480) while stocks struggled with
-inflation. The optimizer only knows this history, and it will turn out to be a poor
-guide to the 1980s, when stocks boomed. That's why we don't trust any single estimate
-too much (Step 12).
+**Gold return (for an Indian investor)**
 
-We also compute the **covariance matrix** (Σ), which combines each asset's volatility
-with the correlations from Step 2. It tells the optimizer how risky any *combination*
-is.
+```
+r_Gold,t = G_INR,t / G_INR,(t−1) − 1   =   (1 + r_USD,t) × FX_t / FX_(t−1) − 1
+```
 
-### Step 9: The "careful" split (risk parity)
-Rule: **each asset should contribute the same share of risk.**
+| Term | What it stands for |
+|---|---|
+| `r_Gold,t` | gold's return in rupees |
+| `r_USD,t` | gold's return in dollars |
+| `FX_t / FX_(t−1)` | how much the dollar rose against the rupee |
 
-For comparison, a simple ⅓ each would get **69% of its risk from gold alone**, because
-gold is so jumpy. Risk parity fixes that by giving less money to jumpy assets:
+**Example:** Feb 2010: ₹51,525.35 / ₹49,941.50 − 1 = **+3.171%**; equivalently (1 +3.239%) × (46.05 / 46.08) − 1.
 
-| | Equity | Bonds | Gold |
-|---|---|---|---|
-| Risk-parity weights | 30.5% | 52.6% | 16.9% |
-| Share of total risk | 33.3% | 33.3% | 33.3% ✓ |
+**Code:** [`sip/data.py` line 71](../sip/data.py#L71): `return (g / g.shift(1) - 1).rename("Gold")`
 
-It ignores the average returns entirely. It only needs the risk numbers, which are much
-more reliable than return estimates.
+**Why convert?** An Indian buys gold in rupees. Over 2000–2019 the rupee fell from about 43.5
+to 71.4 per dollar, so rupee gold grew about **2.5% a year faster** than dollar gold. Using
+dollar gold for an Indian SIP (as the earlier Gemini version did) understates gold.
 
-### Step 10: The "ambitious" split (max Sharpe)
-Rule: **get the most return per unit of risk**, i.e. maximize
-(expected return) ÷ (volatility).
+**Liquid return**
 
-| | Equity | Bonds | Gold | Return/risk (1973–83) |
-|---|---|---|---|---|
-| Max-Sharpe weights | 11.4% | 66.4% | 22.2% | 1.16 |
-| Risk parity (for comparison) | 30.5% | 52.6% | 16.9% | 1.10 |
-| ⅓ each (for comparison) | 33.3% | 33.3% | 33.3% | 1.06 |
+```
+L_d = L_(d−1) × (1 + y_d / 365)        r_Liquid,t = L_t / L_(t−1) − 1
+```
 
-It likes gold (great past returns) and dislikes equity (poor past returns). It's
-"ambitious" because it chases what did well in the past, which is exactly what can go
-wrong.
+| Term | What it stands for |
+|---|---|
+| `L_d` | liquid index on day d |
+| `y_d` | 91-day T-bill yield that applies on day d |
+| `L_t` | liquid index at month end |
+| `r_Liquid,t` | the month's return |
 
-### Step 11: Apply the limits
-Both optimizers must obey two rules:
-- The weights add up to 100% (all 10,000 is invested).
-- **Each asset gets between 10% and 70%.**
+**Example:** Feb 2010: the implied yield was 4.01% a year, so the index grew a little each day; month end 188.1263 / 187.5356 − 1 = **+0.315%**.
 
-In Feb 1983 max Sharpe happened to land inside the limits already (11.4% / 66.4% /
-22.2%), so they changed nothing that year. But in **about two-thirds of years** the
-unrestricted answer breaks them. For example, it would have put **0% in gold in 2023**
-and only 3% in 1998, betting everything on the recent past. The limits keep every asset
-in your SIP. A computer solver (SLSQP) finds the best weights that respect the rules.
+**Code:** [`sip/data.py` line 77](../sip/data.py#L77): `return (level / level.shift(1) - 1).rename("Liquid")`<br>[`sip/data.py` line 86](../sip/data.py#L86): `return ((level / level.shift(1) - 1) * 365).rename("Liquid implied rate")`
 
-### Step 12: Blend the two, which gives your target
-$$\text{Target} = \tfrac12 \times \text{Risk parity} + \tfrac12 \times \text{Max Sharpe}$$
+**Correlation (why these three assets)**
 
-| | Equity | Bonds | Gold |
-|---|---|---|---|
-| Risk parity | 30.5% | 52.6% | 16.9% |
-| Max Sharpe | 11.4% | 66.4% | 22.2% |
-| **Your target (average)** | **21.0%** | **59.5%** | **19.6%** |
-| **Of your 10,000** | **2,095** | **5,949** | **1,956** |
+```
+ρ(i, j) = Cov(r_i, r_j) / (σ_i × σ_j)
+```
 
-Averaging a careful estimate with an ambitious one reduces the damage if either is
-wrong.
+| Term | What it stands for |
+|---|---|
+| `ρ(i, j)` | correlation of assets i and j: +1 move together, 0 unrelated, −1 opposite |
+| `Cov(r_i, r_j)` | how the two monthly returns move together |
+| `σ_i` | volatility of asset i |
 
-### Step 13: Update the target every year
-Every February, the 10-year window moves forward one year and Steps 7–12 are repeated:
+**Example:** Feb 2000 – Jan 2010 (the first window the optimisers see): Nifty–Gold **0.09**, Nifty–Liquid **-0.27**, Gold–Liquid **-0.09**. All low or negative: when Nifty falls, the other two usually don't (diversification).
 
-| Re-fit | Window used | Equity | Bonds | Gold |
-|---|---|---|---|---|
-| Feb 1983 | 1973–1983 | 21.0% | 59.5% | 19.6% |
-| Feb 1984 | 1974–1984 | 31.9% | 53.6% | 14.5% |
-| Feb 1985 | 1975–1985 | 41.0% | 45.0% | 14.0% |
-| Feb 1986 | 1976–1986 | 37.7% | 48.4% | 13.9% |
+**Code:** [`00_raw_data/build_returns.py` line 35](../00_raw_data/build_returns.py#L35): `corr = first_window.corr()`
 
-As stocks recovered in the 1980s, the data showed it, and the target moved toward
-equity automatically. The whole history of targets is in `weights.png`.
+
+**Result:** one table of 239 monthly returns (Feb 2000 – Dec 2019). Feb 2010, your first SIP
+month: Nifty +0.93%, Gold +3.17%, Liquid +0.31%.
 
 ---
 
-## Part C: Running your SIP month by month
+## Part B: Deciding how to split your ₹10,000 (folders `04_`, `05_`, `06_`)
+
+### Steps 7–12: Look back 10 years, run two optimisers, average them
+**Estimates from the past 120 months only (no look-ahead)**
+
+```
+μ_i  = (1/120) × Σ_{s=t−120}^{t−1} r_i,s
+Σ_ij = (1/119) × Σ_s (r_i,s − μ_i)(r_j,s − μ_j)
+```
+
+| Term | What it stands for |
+|---|---|
+| `μ_i` | average monthly return of asset i over the last 120 months |
+| `Σ_ij` | covariance of assets i and j (Σ_ii = variance; √(12·Σ_ii) = yearly volatility) |
+| `r_i,s` | return of asset i in month s |
+| `t` | the month being decided (re-fitted every 12 months) |
+
+**Example:** For Feb 2010 the window is Feb 2000 – Jan 2010. Average return per year (12 × μ): Nifty 16.8% / Gold 15.3% / Liquid 6.2%; yearly volatility: Nifty 28.0% / Gold 16.8% / Liquid 0.5%. Liquid barely moves (volatility under 0.5%), which is what drives the result below.
+
+**Code:** [`sip/optimize.py` line 74](../sip/optimize.py#L74): `current = fn(rets.iloc[i - lookback:i], lo=lo, hi=hi)`<br>[`sip/optimize.py` line 29](../sip/optimize.py#L29): `return max_sharpe_mu(rets.mean().values - rf / MONTHS, rets.cov().values, lo, hi)`
+
+**Risk parity**
+
+```
+RC_i = w_i × (Σ w)_i          minimise  Σ_i (RC_i − mean(RC))²
+```
+
+| Term | What it stands for |
+|---|---|
+| `RC_i` | risk contribution of asset i (its share of portfolio variance) |
+| `(Σ w)_i` | row i of the covariance matrix times the weights |
+| `mean(RC)` | the average contribution; the goal is to make all RC_i equal |
+
+**Example:** Feb 2010: weights Nifty 10.7% / Gold 19.3% / Liquid 70.0%. Liquid is capped at 70%, so the risk shares cannot be made equal: Nifty 46.3%, Gold 54.9%, Liquid -1.3% (Liquid adds almost no risk, and it is slightly negatively correlated with Nifty).
+
+**Code:** [`sip/optimize.py` line 43](../sip/optimize.py#L43): `rc = w * (cov @ w)`<br>[`sip/optimize.py` line 44](../sip/optimize.py#L44): `return ((rc - rc.mean()) ** 2).sum() * 1e8`
+
+**Max Sharpe**
+
+```
+maximise  (w · μ) / √(wᵀ Σ w)
+```
+
+| Term | What it stands for |
+|---|---|
+| `w · μ` | expected monthly return of the portfolio |
+| `√(wᵀ Σ w)` | monthly volatility of the portfolio |
+| `ratio` | return per unit of risk, measured against 0% (no risk-free rate subtracted) |
+
+**Example:** Feb 2010: weights Nifty 10.0% / Gold 20.0% / Liquid 70.0% (Nifty at its 10% floor, Liquid at its 70% cap): expected 9.1% a year with 4.5% volatility, ratio 2.03. Because the ratio is measured against 0%, Liquid's steady ~6% with almost no volatility looks extremely attractive.
+
+**Code:** [`sip/optimize.py` line 34](../sip/optimize.py#L34): `return _solve(lambda w: -(w @ mu) / np.sqrt(w @ cov @ w), len(mu), lo, hi)`
+
+**Constraints (both optimisers)**
+
+```
+Σ_i w_i = 1        0.10 ≤ w_i ≤ 0.70
+```
+
+| Term | What it stands for |
+|---|---|
+| `w_i` | weight of asset i |
+| `0.10 / 0.70` | every asset gets at least 10% and at most 70% |
+
+**Example:** Without these limits the optimisers would put almost everything in Liquid: risk parity Nifty 1.5% / Gold 2.3% / Liquid 96.2%, max Sharpe Nifty 0.5% / Gold 0.4% / Liquid 99.1% (Feb 2010). The 70% cap is what keeps any Nifty and Gold in the portfolio.
+
+**Code:** [`sip/optimize.py` line 16](../sip/optimize.py#L16): `res = minimize(objective, x0, method="SLSQP", bounds=[(lo, hi)] * n,`<br>[`sip/optimize.py` line 17](../sip/optimize.py#L17): `constraints=({"type": "eq", "fun": lambda w: w.sum() - 1.0},),`
+
+**Optimized target (average of the two)**
+
+```
+w = ½ × w_RiskParity + ½ × w_MaxSharpe
+```
+
+| Term | What it stands for |
+|---|---|
+| `w_RiskParity` | weights from strategy 4 |
+| `w_MaxSharpe` | weights from strategy 5 |
+
+**Example:** Feb 2010: ½ × (Nifty 10.7% / Gold 19.3% / Liquid 70.0%) + ½ × (Nifty 10.0% / Gold 20.0% / Liquid 70.0%) = **Nifty 10.3% / Gold 19.7% / Liquid 70.0%**.
+
+**Code:** [`06_optimized_sip/strategy.py` line 31](../06_optimized_sip/strategy.py#L31): `target = 0.5 * risk_parity + 0.5 * max_sharpe`
+
+### Step 13: Update every February
+The 120-month window moves forward a year each time:
+
+| Re-fit | Nifty | Gold | Liquid |
+|---|---|---|---|
+| 2010-02 | 10.3% | 19.7% | 70.0% |
+| 2011-02 | 10.5% | 19.5% | 70.0% |
+| 2012-02 | 10.8% | 19.2% | 70.0% |
+| 2013-02 | 11.0% | 19.0% | 70.0% |
+| 2014-02 | 11.8% | 18.2% | 70.0% |
+| 2015-02 | 12.4% | 17.6% | 70.0% |
+| 2016-02 | 12.7% | 17.3% | 70.0% |
+| 2017-02 | 12.8% | 17.2% | 70.0% |
+| 2018-02 | 13.5% | 16.5% | 70.0% |
+| 2019-02 | 14.7% | 15.3% | 70.0% |
+
+Liquid stays pinned at the 70% cap every year; only the Nifty/Gold split moves.
+
+---
+
+## Part C: Running your SIP month by month (`sip/engine.py`)
 
 ### Step 14: What happens to your money each month
-**Month 1 (Feb 1983).** You have nothing yet, so the 10,000 is split by the target:
+**Instalment**
 
-| | Equity | Bonds | Gold | Total |
-|---|---|---|---|---|
-| Invested | 2,095 | 5,949 | 1,956 | 10,000 |
-| After 0.1% cost | 2,093 | 5,943 | 1,954 | 9,990 |
-| × Feb return | +2.13% | −0.69% | +2.08% | |
-| **End of Feb** | **2,138** | **5,902** | **1,994** | **10,034** |
+```
+C_t = A × (1 + g)^floor(t / 12)
+```
 
-**Month 2 (Mar 1983): the "smart split".** The new 10,000 arrives, and the portfolio
-would be worth 20,034. How much *should* each asset hold, and how much is it *short*?
-
-| | Equity | Bonds | Gold |
-|---|---|---|---|
-| Should hold (target × 20,034) | 4,197 | 11,919 | 3,918 |
-| Actually holds | 2,138 | 5,902 | 1,994 |
-| **Short by (gets the new money)** | **2,060** | **6,017** | **1,924** |
-
-The new money fills the gaps first. That month gold then fell **−14.5%**, but because
-only about 20% of your money was in gold, and stocks (+3.9%) and bonds (+2.2%) rose,
-your whole portfolio dipped by **less than 1%** that month. It ended March at
-4,357 + 12,171 + 3,350 = 19,878 on 20,000 invested. An all-gold investor would have lost
-14.5%. This is diversification working.
-
-**Band rebalancing: the first time it happens (Feb 1985).** The yearly re-fit moved the
-target to 41% / 45% / 14%. Your holdings (85,136 / 139,188 / 35,013) were 33% / 54% /
-13%. Even after the smart instalment, bonds were **6.7 points over target**, which is
-more than the 5-point limit. So the rule **rebalanced**: it sold 17,936 of bonds and
-bought 16,255 of equity and 1,682 of gold. Over all 522 months this happened only
-**23 times**. The rest of the time, the smart instalments alone kept things close to
-target, with no selling.
-
-**Costs:** every trade pays 0.1% (for example, 10 on a 10,000 purchase).
-
-### Step 15: Run the comparison strategies with the same money
-Five other versions of *you* invest the same 10,000 every month, over the same 522
-months, with the same costs:
-
-| Strategy | Rule |
+| Term | What it stands for |
 |---|---|
-| Equity SIP | All 10,000 into stocks |
-| Equal-weight | 3,333 into each, never rebalanced |
-| 60/20/20 | 6,000 / 2,000 / 2,000, reset to that mix every year |
-| Risk-parity SIP | Only Step 9's split |
-| Max-Sharpe SIP | Only Step 10's split |
-| **Optimized SIP** | Step 12's blend (this is you) |
+| `C_t` | money invested in month t |
+| `A` | monthly amount = ₹10,000 |
+| `g` | yearly step-up (0 in this study) |
+| `t` | months since the SIP started |
+
+**Example:** Feb 2010 (t = 0): C = ₹10,000 × (1 + 0)^0 = **₹10,000**.
+
+**Code:** [`sip/engine.py` line 58](../sip/engine.py#L58): `return pd.Series(amount * (1.0 + step_up) ** years, index=index, name="contribution")`
+
+**Splitting the instalment (smart: fill the gaps first, never sell)**
+
+```
+V     = Σ_i h_i + C_t
+gap_i = max(w_i × V − h_i, 0)
+need  = Σ_i gap_i
+buy_i = gap_i / need × C_t              if need ≥ C_t
+buy_i = gap_i + w_i × (C_t − need)      if need < C_t
+```
+
+| Term | What it stands for |
+|---|---|
+| `h_i` | money currently held in asset i |
+| `V` | portfolio value after adding the instalment |
+| `w_i` | target weight of asset i |
+| `gap_i` | how far asset i is below its target, in rupees |
+| `need` | total of all gaps |
+| `C_t` | this month's instalment |
+| `buy_i` | money put into asset i |
+
+**Example:** Month 1 (Feb 2010) starts empty, so every gap equals w_i × ₹10,000: Nifty ₹1,033.06, Gold ₹1,966.94, Liquid ₹7,000.00. Month 2 (Mar 2010): holdings Nifty ₹1,041.65 / Gold ₹2,027.29 / Liquid ₹7,015.03, V = ₹10,083.97 + ₹10,000 = ₹20,083.97; gaps Nifty ₹1,033.14 / Gold ₹1,923.11 / Liquid ₹7,043.75 (need = ₹10,000.00), so the instalment buys **Nifty ₹1,033.14 / Gold ₹1,923.11 / Liquid ₹7,043.75**.
+
+**Code:** [`sip/engine.py` line 63](../sip/engine.py#L63): `total = holdings.sum() + cash`<br>[`sip/engine.py` line 64](../sip/engine.py#L64): `gap = np.maximum(target * total - holdings, 0.0)`<br>[`sip/engine.py` line 69](../sip/engine.py#L69): `return gap / need * cash`<br>[`sip/engine.py` line 70](../sip/engine.py#L70): `return gap + target * (cash - need)`
+
+**Rebalancing (only when the drift is too big)**
+
+```
+drift = max_i | h_i / Σ_j h_j − w_i |
+if drift > 5%:  trade_i = w_i × Σ_j h_j − h_i
+```
+
+| Term | What it stands for |
+|---|---|
+| `drift` | largest gap between an asset's actual share and its target |
+| `h_i` | holding of asset i |
+| `w_i` | target weight |
+| `5%` | the tolerance band |
+| `trade_i` | rupees bought (+) or sold (−) of asset i |
+
+**Example:** After month 1 the actual split was Nifty 10.3% / Gold 20.1% / Liquid 69.6% against a target of Nifty 10.3% / Gold 19.7% / Liquid 70.0%: drift 0.43%, well under 5%, so nothing is sold. Over the whole SIP this rule fired **0 times** (the smart instalments kept the split on target).
+
+**Code:** [`sip/engine.py` line 106](../sip/engine.py#L106): `do_rebal = np.abs(h / h.sum() - w).max() > strategy.band`<br>[`sip/engine.py` line 108](../sip/engine.py#L108): `trade = w * h.sum() - h`
+
+**Trading cost**
+
+```
+cost_t = (Σ bought + Σ sold) × 0.10%
+```
+
+| Term | What it stands for |
+|---|---|
+| `cost_t` | rupees lost to costs this month |
+| `Σ bought` | all purchases this month |
+| `Σ sold` | all sales this month |
+| `0.10%` | 10 basis points per rupee traded |
+
+**Example:** Feb 2010: (₹10,000 + ₹0) × 0.001 = **₹10**, taken from each asset in proportion, leaving Nifty ₹1,032.03 / Gold ₹1,964.97 / Liquid ₹6,993.00.
+
+**Code:** [`sip/engine.py` line 116](../sip/engine.py#L116): `costs[t] = turnover * cost_rate`<br>[`sip/engine.py` line 118](../sip/engine.py#L118): `h = h * (1.0 - costs[t] / start_value)`
+
+**Market move**
+
+```
+h_i ← h_i × (1 + r_i,t)
+```
+
+| Term | What it stands for |
+|---|---|
+| `h_i` | rupees held in asset i |
+| `r_i,t` | asset i's return this month (from `00_raw_data/`) |
+
+**Example:** Feb 2010 returns: Nifty +0.93%, Gold +3.17%, Liquid +0.31%. So Nifty ₹1,032.03 × 1.0093 = **₹1,041.65**, Gold ₹1,964.97 × 1.0317 = **₹2,027.29**, Liquid ₹6,993.00 × 1.0031 = **₹7,015.03**; portfolio **₹10,083.97**.
+
+**Code:** [`sip/engine.py` line 122](../sip/engine.py#L122): `h = h * (1.0 + rets[t])`
+
+**Monthly return of the strategy (time-weighted)**
+
+```
+TWR_t = V_end,t / V_start,t − 1
+```
+
+| Term | What it stands for |
+|---|---|
+| `TWR_t` | the strategy's return in month t, ignoring the new money |
+| `V_end,t` | value at the end of the month |
+| `V_start,t` | value right after the instalment, before costs |
+
+**Example:** Feb 2010: ₹10,083.97 / ₹10,000 − 1 = **+0.84%**.
+
+**Code:** [`sip/engine.py` line 124](../sip/engine.py#L124): `twr[t] = h.sum() / start_value - 1.0`
+
+### Step 15: Five other versions of you
+Same ₹10,000, same 119 months, same costs: 100% Nifty, ⅓ each, 60/20/20, risk parity only,
+max Sharpe only (folders `01_`–`05_`).
 
 ---
 
-## Part D: Checking the result
+## Part D: Checking the result (`sip/metrics.py`, `07_comparison/`)
 
-### Step 16: Score each strategy
-**Your Optimized SIP:**
+### Step 16: How your SIP is scored
+**XIRR (the yearly return earned on your SIP money)**
 
-| Date | Invested so far | Portfolio value |
-|---|---|---|
-| Jan 1993 (10 years) | 1,200,000 | 2,086,677 |
-| Oct 2007 (before the crash) | 2,970,000 | 9,254,142 |
-| Jul 2026 (the end) | **5,220,000** | **40,653,137** (7.8×) |
+```
+Σ_k CF_k / (1 + XIRR)^(t_k) = 0
+```
 
-**XIRR = 7.8%.** That means your SIP grew as if every instalment had been in a bank
-paying 7.8% a year. XIRR is the right measure for a SIP because each of the 522
-instalments was invested for a different length of time.
-
-**Everyone's score:**
-
-| Strategy | Final value | XIRR | Worst fall in account | Return per risk (Sharpe) |
-|---|---|---|---|---|
-| Equity SIP | 119.1 M | **11.3%** | −48.3% | 0.99 |
-| 60/20/20 | 73.3 M | 9.8% | −23.4% | 1.29 |
-| Equal-weight | 58.5 M | 9.0% | −18.2% | 1.29 |
-| Max-Sharpe SIP | 44.8 M | 8.1% | −17.2% | 1.37 |
-| **Optimized SIP** | 40.7 M | 7.8% | **−16.6%** | **1.42** |
-| Risk-parity SIP | 39.1 M | 7.7% | −16.3% | 1.44 |
-
-- **Worst fall:** the largest drop from a peak in your account value. It's the moment
-  investors panic.
-- **Sharpe:** yearly return ÷ yearly bumpiness. Higher means a smoother ride for the
-  same growth.
-
-### Step 17: Was it luck? Try 403 different start dates
-Maybe 1983 was a lucky start. So we run a separate 10-year SIP starting in **every month**
-from Feb 1983 onwards (403 of them) and compare:
-
-| If you had started in… | Equity SIP XIRR (10 yrs) | Optimized SIP XIRR (10 yrs) |
-|---|---|---|
-| Jan 1990 (great decade) | 21.2% | 8.5% |
-| Jan 2000 (dot-com + 2008) | 1.2% | 7.4% |
-| Apr 1999 (worst start) | **−7.2%** (lost money) | **6.1%** |
-
-Across all 403 start dates:
-- The Equity SIP's typical return was higher (11.8% vs 7.0%), but it **lost money in 3%
-  of them**.
-- The Optimized SIP **never** lost money, and its worst case was +3.5% a year.
-
-### Step 18: Does re-learning every year beat "optimize once"?
-A common shortcut is to find the best fixed mix from history and stick to it. We tested
-that fairly:
-1. Using only 1983–2004, try all 66 fixed mixes (0/0/100, 10/0/90, … 100/0/0) and pick
-   the best: **30% / 60% / 10%**.
-2. Run it on the **unseen** years 2004–2026.
-
-| 2004–2026 (unseen) | XIRR |
+| Term | What it stands for |
 |---|---|
-| Best fixed mix from 1983–2004 | 6.4% |
-| **Optimized SIP (re-fits every year)** | **8.0%** |
+| `CF_k` | cash flow k: every instalment is negative (money in), the final value positive |
+| `t_k` | time of cash flow k in years (0, 1/12, 2/12, …) |
+| `XIRR` | the one yearly rate that makes all cash flows balance |
 
-The fixed mix was "perfect" for the past, but the world changed. Re-learning every year
-adapted.
+**Example:** If the SIP stopped after month 1: −₹10,000 at t = 0 and +₹10,083.97 at t = 1/12, so XIRR = (10,083.97 / 10,000.00)^12 − 1 = **10.56%**. Over all 119 instalments it is **7.82%**.
 
-### Step 19: Crash tests and "what if we'd picked other settings?"
-**The 2008 crash, for you:**
+**Code:** [`sip/metrics.py` line 21](../sip/metrics.py#L21): `return np.sum(cashflows / (1.0 + r) ** years)`<br>[`sip/metrics.py` line 28](../sip/metrics.py#L28): `cfs = np.append(-res.contributions.values, res.total.iloc[-1])`
 
-| | Oct 2007 | Feb 2009 | Change |
-|---|---|---|---|
-| Equity SIP account | 15.70 M | 8.59 M | **−7.1 M** (even with new instalments) |
-| **Optimized SIP account** | 9.25 M | 9.65 M | **+0.4 M** |
+**Volatility (how bumpy the ride is)**
 
-Similar pattern in other crashes (time-weighted returns): 1987 −25% vs −9%,
-2000–02 −40% vs +2%, COVID 2020 −19% vs −3%. In **2022**, stocks *and* bonds fell
-together, and the Optimized SIP fell −14% (vs −17% for equity). This is its weak spot.
+```
+σ = std(TWR_1 … TWR_N) × √12
+```
 
-**Sensitivity:** we reran with 5, 10 and 15-year windows and 3, 5 and 10% bands. XIRR
-stayed between **7.2% and 8.1%** every time, so the result doesn't depend on lucky
-settings.
+| Term | What it stands for |
+|---|---|
+| `σ` | yearly volatility |
+| `TWR_t` | monthly returns of the strategy |
+| `√12` | turns a monthly spread into a yearly one |
 
-### Step 20: Conclusion
-For you, investing 10,000 a month from 1983 to 2026:
+**Example:** First 12 months (Feb 2010 – Jan 2011): std of the 12 monthly returns = 0.918% × 3.464 = **3.18%**.
 
-- **All in stocks** would have made you the most money (119 M, 11.3% a year). But you'd
-  have watched the account fall almost **in half**, including losing 7 M in 2008, and in
-  3% of 10-year periods you'd have ended with less than you put in.
-- **The Optimized SIP** made less (40.7 M, 7.8% a year), but its worst fall was only
-  **17%**. It went *up* during 2008, never lost money over any 10-year period, and had one of the
-  **best returns per unit of risk** (Sharpe 1.42; risk parity alone was marginally
-  higher at 1.44).
-- **Honest caveat:** a plain ⅓-each split made more (58.5 M, 9.0%) with a similar worst
-  fall (18%). Simple diversification is a very strong benchmark; the finance research
-  says the same.
+**Code:** [`sip/metrics.py` line 41](../sip/metrics.py#L41): `ann_vol = r.std() * np.sqrt(MONTHS)`
 
-**Bottom line:** the Optimized SIP is a **safety-first** SIP. It trades some growth for
-a much smoother ride, which matters most for someone near a goal (a house or
-retirement), or who might panic and stop their SIP in a crash.
+**Sharpe ratio (return per unit of bumpiness, against 0%)**
+
+```
+Sharpe = 12 × mean(TWR_t) / σ
+```
+
+| Term | What it stands for |
+|---|---|
+| `mean(TWR_t)` | average monthly return |
+| `12 ×` | turns it into a yearly return |
+| `σ` | yearly volatility (above) |
+
+**Example:** First 12 months: 12 × 0.789% / 3.18% = **2.98**.
+
+**Code:** [`sip/metrics.py` line 56](../sip/metrics.py#L56): `"Sharpe": excess.mean() * MONTHS / ann_vol,`
+
+**Sharpe vs Liquid (return above the T-bill rate, per unit of bumpiness)**
+
+```
+Sharpe_vs_Liquid = 12 × mean(TWR_t − r_Liquid,t) / σ
+```
+
+| Term | What it stands for |
+|---|---|
+| `r_Liquid,t` | the Liquid fund's return that month (≈ 91-day T-bill) |
+| `TWR_t − r_Liquid,t` | what the strategy earned above simply holding Liquid |
+| `σ` | yearly volatility of the strategy |
+
+**Example:** First 12 months: 12 × (0.789% − 0.471%) / 3.18% = **1.20**. This is the fair comparison when a near-cash asset is available (see `07_comparison/`).
+
+**Code:** [`sip/metrics.py` line 71](../sip/metrics.py#L71): `out["Sharpe vs Liquid"] = excess_vs_rf.mean() * MONTHS / ann_vol`
+
+**Max drawdown (worst fall of the strategy from a previous peak)**
+
+```
+G_t = Π_{s≤t} (1 + TWR_s)          MDD = min_t ( G_t / max_{s≤t} G_s − 1 )
+```
+
+| Term | What it stands for |
+|---|---|
+| `G_t` | growth of ₹1 invested in the strategy |
+| `max_{s≤t} G_s` | highest value so far |
+| `MDD` | the deepest percentage fall from a peak |
+
+**Example:** First 12 months: deepest fall **-1.37%**. Whole SIP: see results below.
+
+**Code:** [`sip/metrics.py` line 35](../sip/metrics.py#L35): `return float((series / peak - 1.0).min())`
+
+**Worst fall in the account (what you would actually have seen)**
+
+```
+Worst fall = min_t ( V_t / max_{s≤t} V_s − 1 )
+```
+
+| Term | What it stands for |
+|---|---|
+| `V_t` | account value in rupees at the end of month t (includes new instalments) |
+
+**Example:** First 12 months: **0.00%** (new instalments hide small dips; the account ended Jan 2011 at ₹125,384 on ₹1,20,000 invested).
+
+**Code:** [`sip/metrics.py` line 61](../sip/metrics.py#L61): `"Worst wealth drop": max_drawdown(res.total),`
+
+**Selling per year (a proxy for tax events)**
+
+```
+Sell turnover = Σ_t sold_t / mean(V_t) / years
+```
+
+| Term | What it stands for |
+|---|---|
+| `sold_t` | rupees sold in month t |
+| `mean(V_t)` | average account value |
+| `years` | length of the SIP = 119 / 12 = 9.92 |
+
+**Example:** Whole SIP: ₹0 sold / ₹784,830 average / 9.92 years = **0.00%** a year.
+
+**Code:** [`sip/metrics.py` line 63](../sip/metrics.py#L63): `"Annual sell turnover": res.sold.sum() / res.total.mean() / (len(r) / MONTHS),`
+
+**Everyone's scores (Feb 2010 – Dec 2019):**
+
+| Strategy | Final value | XIRR | Max drawdown | Sharpe vs Liquid |
+|---|---|---|---|---|
+| Equity SIP | ₹2,176,119 | 11.7% | -23.7% | 0.29 |
+| Equal-weight SIP | ₹1,850,460 | 8.6% | -6.5% | 0.28 |
+| 60/20/20 annual rebal | ₹1,990,520 | 10.0% | -8.9% | 0.33 |
+| Risk-parity SIP | ₹1,778,154 | 7.9% | -1.7% | 0.26 |
+| Max-Sharpe SIP | ₹1,770,116 | 7.8% | -1.8% | 0.24 |
+| Optimized SIP | ₹1,774,231 | 7.8% | -1.7% | 0.25 |
+
+A 100% Liquid SIP earned 7.3%.
+
+### Step 17: Every 5-year SIP (60 start dates)
+Median XIRR: 100% Nifty 12.2%, 60/20/20
+9.7%, Optimized 7.4%.
+No strategy lost money over any 5-year window in this decade.
+
+### Step 18: Optimise once vs re-learn every year
+The best fixed mix on 2010–2014 was **{'Nifty': 0.6, 'Gold': 0.3, 'Liquid': 0.1}**. On the unseen years 2015–2019 it earned
+10.8% (Sharpe vs Liquid 0.27),
+versus 7.9% (0.23) for the Optimized SIP.
+
+### Step 19: Stress periods
+| Period | 100% Nifty | Optimized SIP |
+|---|---|---|
+| 2011 slowdown + euro crisis (Jan-Dec 2011) | -23.7% | 8.8% |
+| 2013 taper tantrum, rupee crash (Jun-Aug 2013) | -8.3% | 4.0% |
+| 2015-16 China/global sell-off (Mar 2015-Feb 2016) | -20.5% | 5.1% |
+| 2018 IL&FS crisis (Sep-Oct 2018) | -10.9% | 0.4% |
+
+Changing the look-back (60 / 90 / 120 months) or the band (3 / 5 / 10%) moved the Optimized
+SIP's XIRR by less than 0.2 percentage points.
+
+### Step 20: Verdict for you
+- **100% Nifty** would have made the most (₹2,176,119, 11.7%) but fell
+  -23.7% from its peak in 2011.
+- **Your Optimized SIP** made ₹1,774,231 (7.8%) and never fell more than
+  1.7%, because it was about **70% Liquid**. That is only
+  0.5% a year more than a 100% Liquid SIP.
+- **60/20/20** gave the best return above the T-bill rate per unit of risk (Sharpe vs Liquid
+  0.33).
+
+**Bottom line:** with the mechanics kept identical, the optimisers turn a cash-like Liquid
+fund into a 70% cash portfolio. Very safe, but not better per unit of risk than a simple 60/20/20.

@@ -17,14 +17,15 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent / "us_data"))
 
 import forecast as fc  # noqa: E402
 from sip import analysis, plots  # noqa: E402
-from sip.data import load_macro, read_returns_table  # noqa: E402
+from us_data import load_macro, read_returns_table  # noqa: E402
 from sip.engine import Strategy, contribution_schedule, run_sip  # noqa: E402
 from sip.metrics import summary_table  # noqa: E402
 from sip.report import fmt  # noqa: E402
-from sip.strategies import build_strategies  # noqa: E402
+from sip.optimize import fixed_weights, walk_forward_weights  # noqa: E402
 
 ORACLE = "Oracle (perfect foresight)"
 
@@ -59,9 +60,15 @@ def main():
             imp.to_csv(out / f"importance_{m.lower().replace(' ', '_')}.csv", index=False)
 
     # ---- Part B: plug forecasts into the SIP ---------------------------------------
-    base = build_strategies(rets)
-    keep = {"Equity SIP", "Equal-weight SIP", "Optimized SIP"}
-    strategies = [s for s in base if s.name in keep]
+    # The three reference strategies, rebuilt here on the US assets (Equity, Bonds, Gold).
+    rp = walk_forward_weights(rets, "risk_parity", 120, lo=0.10, hi=0.70)
+    ms = walk_forward_weights(rets, "max_sharpe", 120, lo=0.10, hi=0.70)
+    base = [
+        Strategy("Equity SIP", fixed_weights(rets.index, {"Equity": 1, "Bonds": 0, "Gold": 0})),
+        Strategy("Equal-weight SIP", fixed_weights(rets.index, {a: 1 / 3 for a in rets.columns})),
+        Strategy("Optimized SIP", (rp + ms) / 2, contribution="smart", rebalance="band", band=0.05),
+    ]
+    strategies = list(base)
     ml_targets = {m: fc.forecast_weights(rets, forecasts[m]) for m in fc.MODELS}
     ml_targets[ORACLE] = fc.forecast_weights(rets, fc.build_targets(rets, partial=True))
     for m, target in ml_targets.items():

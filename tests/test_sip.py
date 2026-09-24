@@ -2,7 +2,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sip.data import load_returns, par_bond_price
+import sys
+from pathlib import Path
+
+from sip.data import (NIFTY_DIVIDEND_YIELD, gold_inr_price, load_daily, load_returns,
+                      load_usdinr_daily, month_end, read_returns_table)
 from sip.engine import Strategy, _smart_split, contribution_schedule, run_sip
 from sip.metrics import max_drawdown, sip_xirr, xirr
 from sip.optimize import (fixed_weights, max_sharpe, min_variance, risk_parity,
@@ -12,7 +16,7 @@ IDX = pd.period_range("2000-01", periods=24, freq="M")
 
 
 def flat_returns(rate=0.01):
-    return pd.DataFrame(rate, index=IDX, columns=["Equity", "Bonds", "Gold"])
+    return pd.DataFrame(rate, index=IDX, columns=["Nifty", "Gold", "Liquid"])
 
 
 def test_xirr_matches_known_rate():
@@ -21,14 +25,14 @@ def test_xirr_matches_known_rate():
 
 
 def test_sip_xirr_equals_constant_monthly_return():
-    res = run_sip(flat_returns(0.01), Strategy("s", fixed_weights(IDX, {"Equity": 1,
-                  "Bonds": 0, "Gold": 0})), contribution_schedule(IDX, 100), cost_bps=0)
+    res = run_sip(flat_returns(0.01), Strategy("s", fixed_weights(IDX, {"Nifty": 1,
+                  "Gold": 0, "Liquid": 0})), contribution_schedule(IDX, 100), cost_bps=0)
     assert sip_xirr(res) == pytest.approx(1.01 ** 12 - 1, rel=1e-6)
     assert res.twr.values == pytest.approx(0.01)
 
 
 def test_costs_reduce_value():
-    w = fixed_weights(IDX, {"Equity": 0.5, "Bonds": 0.5, "Gold": 0.0})
+    w = fixed_weights(IDX, {"Nifty": 0.5, "Gold": 0.5, "Liquid": 0.0})
     c = contribution_schedule(IDX, 100)
     free = run_sip(flat_returns(), Strategy("s", w), c, cost_bps=0).total.iloc[-1]
     paid = run_sip(flat_returns(), Strategy("s", w), c, cost_bps=50).total.iloc[-1]
@@ -48,8 +52,8 @@ def test_smart_split_fills_underweight_first():
 
 def test_calendar_rebalance_restores_target():
     rets = flat_returns(0.0)
-    rets["Equity"] = 0.05
-    s = Strategy("s", fixed_weights(IDX, {"Equity": 0.5, "Bonds": 0.5, "Gold": 0.0}),
+    rets["Nifty"] = 0.05
+    s = Strategy("s", fixed_weights(IDX, {"Nifty": 0.5, "Gold": 0.5, "Liquid": 0.0}),
                  rebalance="calendar", rebalance_every=12)
     res = run_sip(rets, s, contribution_schedule(IDX, 100), cost_bps=0)
     assert res.sold.iloc[11] > 0 and res.sold.iloc[:11].eq(0).all()
@@ -60,9 +64,22 @@ def test_step_up_schedule():
     assert c.iloc[0] == 100 and c.iloc[12] == pytest.approx(110)
 
 
-def test_par_bond_prices_at_par():
-    assert par_bond_price(0.05, 0.05, 10) == pytest.approx(1.0)
-    assert par_bond_price(0.05, 0.06, 10) < 1.0 < par_bond_price(0.05, 0.04, 10)
+def test_nifty_return_formula_feb_2010():
+    # r = P_t / P_(t-1) - 1 + dividend_yield / 12, with the month-end closes from the raw file
+    p = month_end(load_daily()["Nifty"])
+    expected = p["2010-02"] / p["2010-01"] - 1 + NIFTY_DIVIDEND_YIELD / 12
+    assert load_returns().loc["2010-02", "Nifty"] == pytest.approx(expected)
+    assert p["2010-01"] == pytest.approx(4882.05) and p["2010-02"] == pytest.approx(4922.30)
+
+
+def test_gold_is_converted_to_rupees():
+    # gold (INR) = gold (USD) x rupees per dollar, both at month end
+    gold_usd = month_end(load_daily()["Gold"])
+    fx = month_end(load_usdinr_daily())
+    assert gold_inr_price()["2010-02"] == pytest.approx(gold_usd["2010-02"] * fx["2010-02"])
+    r = load_returns().loc["2010-02", "Gold"]
+    assert r == pytest.approx((gold_usd["2010-02"] / gold_usd["2010-01"])
+                              * (fx["2010-02"] / fx["2010-01"]) - 1)
 
 
 def test_max_drawdown():
@@ -91,9 +108,9 @@ def test_walk_forward_has_no_look_ahead():
     w = walk_forward_weights(rets, "min_variance", lookback=60)
     # Changing the future must not change today's weights.
     shocked = rets.copy()
-    shocked.iloc[200:] *= -5
+    shocked.iloc[150:] *= -5
     w2 = walk_forward_weights(shocked, "min_variance", lookback=60)
-    pd.testing.assert_frame_equal(w.iloc[:200], w2.iloc[:200])
+    pd.testing.assert_frame_equal(w.iloc[:150], w2.iloc[:150])
     assert w.iloc[:60].isna().all().all()
 
 
@@ -105,14 +122,15 @@ def test_weight_grid_sums_to_one():
 
 def test_bundled_data_is_sane():
     rets = load_returns()
-    assert list(rets.columns) == ["Equity", "Bonds", "Gold"]
-    assert rets.index[0] == pd.Period("1973-02", "M")
+    assert list(rets.columns) == ["Nifty", "Gold", "Liquid"]
+    assert rets.index[0] == pd.Period("2000-02", "M")
+    assert rets.index[-1] == pd.Period("2019-12", "M") and len(rets) == 239
     assert not rets.isna().any().any()
     ann = (1 + rets).prod() ** (12 / len(rets)) - 1
-    assert 0.08 < ann["Equity"] < 0.14      # S&P 500 total return ~ 10-11%
-    assert 0.04 < ann["Bonds"] < 0.09
-    inr = load_returns("INR")
-    assert (((1 + inr).prod() ** (12 / len(inr)) - 1) > ann).all()   # rupee depreciated
+    assert 0.10 < ann["Nifty"] < 0.14        # Nifty 50 incl. dividends, 2000-2019
+    assert 0.09 < ann["Gold"] < 0.14         # gold in rupees
+    assert 0.06 < ann["Liquid"] < 0.08       # 91-day T-bill level
+    assert rets["Liquid"].std() < 0.005      # cash-like
 
 
 # ---------- forecasting ----------
@@ -120,13 +138,16 @@ def test_bundled_data_is_sane():
 import sys  # noqa: E402
 from pathlib import Path  # noqa: E402
 
+# The ML extension runs on the archived US data (extras/us_data).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "extras" / "ai_forecasting"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "extras" / "us_data"))
 import forecast as fc  # noqa: E402
-from sip.data import load_macro, read_returns_table  # noqa: E402
+from us_data import load_macro  # noqa: E402
+from us_data import load_returns as load_us_returns  # noqa: E402
 
 
 def test_targets_are_next_12_months():
-    rets = load_returns()
+    rets = load_us_returns()
     Y = fc.build_targets(rets)
     j = 100
     expected = (1 + rets.iloc[j + 1:j + 13]).prod() - 1
@@ -135,7 +156,7 @@ def test_targets_are_next_12_months():
 
 
 def test_forecasts_have_no_look_ahead():
-    rets = load_returns()
+    rets = load_us_returns()
     macro = load_macro()
     f1, _ = fc.walk_forward_forecasts(fc.build_features(rets, macro),
                                       fc.build_targets(rets), "Ridge")
@@ -148,7 +169,7 @@ def test_forecasts_have_no_look_ahead():
 
 
 def test_forecast_weights_are_valid():
-    rets = load_returns()
+    rets = load_us_returns()
     w = fc.forecast_weights(rets, fc.build_targets(rets, partial=True))
     w = w.dropna()
     assert np.allclose(w.sum(axis=1), 1.0)
@@ -158,11 +179,10 @@ def test_forecast_weights_are_valid():
 # ---------- repository layout ----------
 
 def test_returns_table_matches_raw_data():
-    for currency in ("USD", "INR"):
-        built = load_returns(currency)
-        table = read_returns_table(currency)
-        assert (built.index == table.index).all()
-        assert np.abs(built.values - table.values).max() < 1e-7
+    built = load_returns()
+    table = read_returns_table()
+    assert (built.index == table.index).all()
+    assert np.abs(built.values - table.values).max() < 1e-7
 
 
 def test_six_strategy_folders_load():

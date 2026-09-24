@@ -1,6 +1,6 @@
 """Strategy 3: 60/20/20 SIP. The classic fixed mix, reset once a year.
 
-Rule: every month, invest 60% in equity, 20% in bonds, 20% in gold. Every 12 months,
+Rule: every month, invest 60% in Nifty, 20% in gold, 20% in liquid. Every 12 months,
 sell what has grown too big and buy what has shrunk, so the portfolio is back at
 exactly 60/20/20 (annual rebalancing).
 
@@ -19,7 +19,7 @@ from sip.report import LOOKBACK, run_strategy_folder  # noqa: E402
 
 NAME = "60/20/20 annual rebal"
 COLOUR = "#1baf7a"
-WEIGHTS = {"Equity": 0.60, "Bonds": 0.20, "Gold": 0.20}
+WEIGHTS = {"Nifty": 0.60, "Gold": 0.20, "Liquid": 0.20}
 
 
 def build(returns, lookback: int = LOOKBACK) -> Strategy:

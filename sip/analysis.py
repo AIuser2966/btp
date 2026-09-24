@@ -49,17 +49,22 @@ def rolling_summary(roll: pd.DataFrame, benchmark: str = "Equity SIP") -> pd.Dat
 def static_grid(returns: pd.DataFrame, contrib: pd.Series, step: float = 0.10,
                 cost_bps: float = 10.0) -> pd.DataFrame:
     """Every static mix on a grid, bought with pro-rata instalments + annual rebalancing."""
+    rf = returns["Liquid"] if "Liquid" in returns else None
     rows = []
     for w in weight_grid(list(returns.columns), step):
         s = Strategy(str(w), fixed_weights(contrib.index, w), rebalance="calendar")
-        m = summarise(run_sip(returns, s, contrib, cost_bps))
+        m = summarise(run_sip(returns, s, contrib, cost_bps), rf_returns=rf)
         rows.append({**w, **{k: m[k] for k in
-                             ("XIRR", "Volatility", "Sharpe", "Max drawdown",
-                              "Worst wealth drop")}})
+                             ("XIRR", "Volatility", "Sharpe", "Sharpe vs Liquid",
+                              "Max drawdown", "Worst wealth drop") if k in m}})
     return pd.DataFrame(rows)
 
 
-def best_static(grid: pd.DataFrame, assets: list[str], objective: str = "Sharpe") -> dict:
+def best_static(grid: pd.DataFrame, assets: list[str], objective: str | None = None) -> dict:
+    """Best fixed mix by Sharpe. With a cash-like Liquid asset, Sharpe must be measured
+    against Liquid (otherwise 100% Liquid 'wins' with a near-zero denominator)."""
+    if objective is None:
+        objective = "Sharpe vs Liquid" if "Sharpe vs Liquid" in grid else "Sharpe"
     row = grid.loc[grid[objective].idxmax()]
     return {a: float(row[a]) for a in assets}
 
@@ -79,7 +84,7 @@ def train_test_split(returns: pd.DataFrame, strategies: list[Strategy],
     w_star = best_static(grid, assets)
     tuned = Strategy("Best static (train-tuned)", fixed_weights(returns.index, w_star),
                      rebalance="calendar",
-                     description=f"Grid-search max-Sharpe mix on {train[0]}..{train[1]}: {w_star}")
+                     description=f"Grid-search best-Sharpe (vs Liquid) mix on {train[0]}..{train[1]}: {w_star}")
     contrib = contribution_schedule(test_idx, amount)
     results = [run_sip(returns, s, contrib, cost_bps) for s in [*strategies, tuned]]
     return w_star, results
@@ -98,17 +103,17 @@ def crisis_table(results, periods: dict[str, tuple[str, str]]) -> pd.DataFrame:
     return pd.DataFrame(rows).T
 
 
+# Indian market stress periods inside the SIP window (Nifty peak-to-trough, month ends).
 CRISES = {
-    "1987 crash (Sep-Nov 1987)": ("1987-09", "1987-11"),
-    "Dot-com bust (Sep 2000-Sep 2002)": ("2000-09", "2002-09"),
-    "Global financial crisis (Nov 2007-Feb 2009)": ("2007-11", "2009-02"),
-    "COVID crash (Feb-Mar 2020)": ("2020-02", "2020-03"),
-    "2022 rate shock (Jan-Sep 2022)": ("2022-01", "2022-09"),
+    "2011 slowdown + euro crisis (Jan-Dec 2011)": ("2011-01", "2011-12"),
+    "2013 taper tantrum, rupee crash (Jun-Aug 2013)": ("2013-06", "2013-08"),
+    "2015-16 China/global sell-off (Mar 2015-Feb 2016)": ("2015-03", "2016-02"),
+    "2018 IL&FS crisis (Sep-Oct 2018)": ("2018-09", "2018-10"),
 }
 
 
 
-def sensitivity(returns: pd.DataFrame, contrib: pd.Series, lookbacks=(60, 120, 180),
+def sensitivity(returns: pd.DataFrame, contrib: pd.Series, lookbacks=(60, 90, 120),
                 bands=(0.03, 0.05, 0.10), cost_bps: float = 10.0) -> pd.DataFrame:
     """Optimized SIP under other look-backs / bands, plus an ablation of the smart instalments.
 
@@ -130,8 +135,10 @@ def sensitivity(returns: pd.DataFrame, contrib: pd.Series, lookbacks=(60, 120, 1
         for label, contribution, rebalance, band in variants:
             s = Strategy(label, target, contribution=contribution, rebalance=rebalance,
                          band=band)
-            m = summarise(run_sip(returns, s, contrib, cost_bps))
+            m = summarise(run_sip(returns, s, contrib, cost_bps),
+                          rf_returns=returns["Liquid"] if "Liquid" in returns else None)
             rows.append({"Look-back (months)": lb, "Execution": label,
-                         **{k: m[k] for k in ("XIRR", "Volatility", "Sharpe",
-                                              "Worst wealth drop", "Annual sell turnover")}})
+                         **{k: m[k] for k in ("XIRR", "Volatility", "Sharpe", "Sharpe vs Liquid",
+                                              "Worst wealth drop", "Annual sell turnover")
+                            if k in m}})
     return pd.DataFrame(rows).set_index(["Look-back (months)", "Execution"])

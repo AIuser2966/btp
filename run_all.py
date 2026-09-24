@@ -1,4 +1,4 @@
-"""Rebuild everything in order: data -> six strategies -> comparison.
+"""Rebuild everything in order: data -> six strategies -> comparison -> explainer READMEs.
 
     python run_all.py
 """
@@ -17,7 +17,7 @@ STEPS = [
     ["05_max_sharpe_sip/strategy.py"],
     ["06_optimized_sip/strategy.py"],
     ["07_comparison/run.py"],
-    ["07_comparison/run.py", "--currency", "INR"],
+    ["docs/make_readmes.py"],
 ]
 
 for step in STEPS:

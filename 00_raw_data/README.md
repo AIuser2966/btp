@@ -1,147 +1,194 @@
-# 00 · Raw Data: From Market Prices to Monthly Returns
+# 00 · Raw Data: From Daily Prices to Monthly Rupee Returns
 
-> **What this folder does:** it turns 50+ years of raw market data into **one clean table
-> of monthly returns** for three assets. This table is the **only input** all six
-> strategies use, so they are compared on exactly the same data.
+> **What this folder does:** it turns the daily market file (Nifty 50, gold, liquid fund,
+> 2000–2019) into **one table of monthly rupee returns**. That table is the **only input**
+> all six strategies use, so they are compared on exactly the same data.
 
 ```
-raw/*.csv  ──►  build_returns.py  ──►  monthly_returns_usd.csv  (642 months × 3 assets)
-                                  └─►  monthly_returns_inr.csv  (same, for a rupee investor)
+raw/final_market_data_2000_2019.csv  ─┐
+raw/usdinr_daily_fred.csv            ─┴─►  build_returns.py  ─►  monthly_returns.csv  (239 months × 3)
+                                                              └─►  monthly_prices.csv  (month-end values used)
 ```
 
 ## 1. The raw files (`raw/`)
 
-| File | Source | What it contains | Used for |
+| File | Source | Columns | Notes |
 |---|---|---|---|
-| `sp500_shiller.csv` | Robert Shiller (Yale), S&P 500 dataset | Monthly index price **P**, annual dividend **D** | Equity return |
-| `us10y_yield.csv` | FRED (US Federal Reserve) | 10-year government bond yield **y** (% per year) | Bond return |
-| `gold_usd.csv` | Monthly gold price dataset | Gold price **G** (USD per ounce) | Gold return |
-| `usdinr.csv` | FRED | Rupees per dollar **FX** | Rupee conversion |
+| `final_market_data_2000_2019.csv` | Your compiled data (daily, every calendar day 2000-01-01 to 2019-12-31) | `Nifty`, `Gold`, `Liquid` | Weekends/holidays repeat the last value |
+| `usdinr_daily_fred.csv` | FRED series DEXINUS (US Federal Reserve), via [datasets/exchange-rates](https://github.com/datasets/exchange-rates) | `USDINR` (rupees per US dollar) | Blank on US holidays; the last available rate is used |
 
-All are public and bundled here, so anyone can rerun the project and get **identical
-numbers** (reproducibility).
+**What each column really is (checked, see section 4):**
 
-**Example rows (the first SIP month and the one before):**
-
-| Month | S&P 500 (P) | Annual dividend (D) | Bond yield (y) | Gold (G) | ₹ per $ (FX) |
-|---|---|---|---|---|---|
-| Jan 1983 | 144.30 | 6.883 | 10.46% | 481 | 9.79 |
-| Feb 1983 | 146.80 | 6.897 | 10.72% | 491 | 9.92 |
-
-**Why these three assets?** They don't move together. Correlations of monthly returns,
-Feb 1973 – Jan 1983:
-
-    ρ(i, j) = Cov(r_i, r_j) / (σ_i × σ_j)
-
-| Pair | Correlation |
-|---|---|
-| Equity – Bonds | 0.28 |
-| Equity – Gold | 0.16 |
-| Bonds – Gold | −0.03 |
-
-Low correlations mean that when one falls, the others usually don't. That is
-**diversification**, the reason a multi-asset SIP can reduce risk.
-
-**Why start in 1973?** Gold only began trading at free-market prices after the Bretton
-Woods system ended (1971–73), and the rupee series starts in January 1973.
+| Column | What it is | Unit |
+|---|---|---|
+| `Nifty` | Nifty 50 **price** index (NSE closing values). Does **not** include dividends | index points |
+| `Gold` | International gold price | **US dollars** per troy ounce, not rupees |
+| `Liquid` | A liquid-fund index that grows every day by the 91-day T-bill yield ÷ 365 | index (100 on 1 Jan 2000) |
 
 ## 2. The formulas: how each monthly return is built
 
-A **return** is the growth of 1 unit of money over one month. We use returns rather than
-prices because they are comparable across assets, and a portfolio's return is simply the
-weighted average of its assets' returns:
+The SIP invests once a month, so each series is sampled at **month end**, then turned into
+a return (the growth of ₹1 over the month).
 
-    r_portfolio = w_Equity × r_Equity + w_Bonds × r_Bonds + w_Gold × r_Gold
+**Month-end value**
 
-### Equity: total return (price + dividend)
+```
+X_month = last available daily value of X in that calendar month
+```
 
-    r_Equity(t) = ( P(t) + D(t−1) / 12 ) / P(t−1) − 1
+| Term | What it stands for |
+|---|---|
+| `X` | any daily series (Nifty, Gold, Liquid, USD/INR) |
+| `X_month` | the value used for that month |
 
-Shiller's dividend is per year, so one month's dividend is D/12.
+**Example:** Feb 2010: Nifty 4,922.30, Gold $1,118.9, USD/INR 46.05, Liquid 188.1263 (Jan 2010: 4,882.05, $1,083.8, 46.08, 187.5356).
 
-**Feb 1983:**  (146.80 + 6.883/12) / 144.30 − 1 = 147.374 / 144.30 − 1 = **+2.13%**
-(+1.73% from price, +0.40% from dividend)
+**Code:** [`sip/data.py` line 48](../sip/data.py#L48): `out = series.dropna().resample("ME").last()`
 
-Dividends matter: leaving them out would understate equity by about 2–4% a year.
+**Nifty 50 total return (price + dividends)**
 
-### Gold: price return
+```
+r_Nifty,t = P_t / P_(t−1) − 1 + dy / 12
+```
 
-    r_Gold(t) = G(t) / G(t−1) − 1
+| Term | What it stands for |
+|---|---|
+| `P_t` | Nifty 50 month-end close this month |
+| `P_(t−1)` | Nifty 50 month-end close last month |
+| `dy` | Nifty dividend yield per year = 1.3% (assumption, see below) |
+| `dy / 12` | one month of dividends |
 
-**Feb 1983:**  491 / 481 − 1 = **+2.08%**
+**Example:** Feb 2010: 4,922.30 / 4,882.05 − 1 + 0.013 / 12 = +0.824% + +0.108% = **+0.933%**.
 
-### Bonds: built from the interest rate
+**Code:** [`sip/data.py` line 57](../sip/data.py#L57): `ret = price / price.shift(1) - 1 + dividend_yield / 12`
 
-We only have the bond **yield**, so we simulate a 10-year government bond fund:
+**Why add dividends?** An index fund investor receives the dividends of the 50 companies
+(reinvested in the fund). The price index leaves them out, which would understate Nifty by
+about 1–2% a year. NSE publishes a separate Total Return Index, but no source reachable from
+this project had its history, so a constant **1.3%** a year is added. The
+Nifty 50 dividend yield has historically been **1–2%** (1.35% in the May 2026 NSE factsheet;
+[Bajaj AMC](https://www.bajajamc.com/knowledge-centre/nifty-50-dividend-yield)). It is one
+constant in `sip/data.py` (`NIFTY_DIVIDEND_YIELD`) and easy to change.
 
-1. At the start of month t, buy a new 10-year bond for 1.00 paying coupon **c = y(t−1)**.
-2. At month end it has **T = 9 years 11 months** left; re-price it at the new yield **y(t)**.
-3. Return = price change + one month of interest.
+**Gold in rupees**
 
-Bond price (coupons paid twice a year, n = 2T half-years):
+```
+G_INR,t = G_USD,t × FX_t
+```
 
-    Price = (c/2) / (y/2) × [ 1 − (1 + y/2)^(−n) ] + (1 + y/2)^(−n)
-            └── value of all coupons ──┘   └ value of the 1.00 back ┘
+| Term | What it stands for |
+|---|---|
+| `G_USD,t` | gold price in US dollars per ounce at month end |
+| `FX_t` | rupees per US dollar at month end |
+| `G_INR,t` | gold price in rupees per ounce |
 
-    r_Bonds(t) = Price( c = y(t−1), y = y(t), T = 10 − 1/12 ) − 1 + y(t−1) / 12
+**Example:** Feb 2010: $1,118.9 × 46.05 = **₹51,525.35** per ounce (Jan 2010: $1,083.8 × 46.08 = ₹49,941.50).
 
-**Feb 1983:**
+**Code:** [`sip/data.py` line 65](../sip/data.py#L65): `return (gold_usd * fx).rename("Gold")`
 
-    c/2 = 0.05230,  y/2 = 0.05360,  n = 19.833
-    (1.0536)^(−19.833) = 0.3551
-    Price = (0.05230 / 0.05360) × (1 − 0.3551) + 0.3551 = 0.9844   →  −1.56%
-    Interest = 10.46% / 12 = +0.87%
-    r_Bonds = −1.56% + 0.87% = −0.69%
+**Gold return (for an Indian investor)**
 
-Check with duration (about 6 for this bond): −6 × (10.72% − 10.46%) ≈ −1.56% ✓.
-Rates rose, so the bond lost value, exactly like a real bond fund (and like 2022).
+```
+r_Gold,t = G_INR,t / G_INR,(t−1) − 1   =   (1 + r_USD,t) × FX_t / FX_(t−1) − 1
+```
 
-### Optional: rupee investor
+| Term | What it stands for |
+|---|---|
+| `r_Gold,t` | gold's return in rupees |
+| `r_USD,t` | gold's return in dollars |
+| `FX_t / FX_(t−1)` | how much the dollar rose against the rupee |
 
-An Indian investor holding these assets also gains or loses on the dollar:
+**Example:** Feb 2010: ₹51,525.35 / ₹49,941.50 − 1 = **+3.171%**; equivalently (1 +3.239%) × (46.05 / 46.08) − 1.
 
-    r_INR(t) = (1 + r_USD(t)) × FX(t) / FX(t−1) − 1
+**Code:** [`sip/data.py` line 71](../sip/data.py#L71): `return (g / g.shift(1) - 1).rename("Gold")`
 
-**Feb 1983:** the dollar rose 9.9184 / 9.7938 = +1.27%, so equity in rupees =
-1.0213 × 1.0127 − 1 = **+3.43%** (bonds +0.57%, gold +3.38%).
+**Why convert?** An Indian buys gold in rupees. Over 2000–2019 the rupee fell from about 43.5
+to 71.4 per dollar, so rupee gold grew about **2.5% a year faster** than dollar gold. Using
+dollar gold for an Indian SIP (as the earlier Gemini version did) understates gold.
 
-## 3. The output: `monthly_returns_usd.csv` / `monthly_returns_inr.csv`
+**Liquid return**
 
-**642 months (Feb 1973 – Jul 2026) × 3 assets**, in decimals (0.0213 = 2.13%):
+```
+L_d = L_(d−1) × (1 + y_d / 365)        r_Liquid,t = L_t / L_(t−1) − 1
+```
 
-| Month | Equity | Bonds | Gold |
+| Term | What it stands for |
+|---|---|
+| `L_d` | liquid index on day d |
+| `y_d` | 91-day T-bill yield that applies on day d |
+| `L_t` | liquid index at month end |
+| `r_Liquid,t` | the month's return |
+
+**Example:** Feb 2010: the implied yield was 4.01% a year, so the index grew a little each day; month end 188.1263 / 187.5356 − 1 = **+0.315%**.
+
+**Code:** [`sip/data.py` line 77](../sip/data.py#L77): `return (level / level.shift(1) - 1).rename("Liquid")`<br>[`sip/data.py` line 86](../sip/data.py#L86): `return ((level / level.shift(1) - 1) * 365).rename("Liquid implied rate")`
+
+**Correlation (why these three assets)**
+
+```
+ρ(i, j) = Cov(r_i, r_j) / (σ_i × σ_j)
+```
+
+| Term | What it stands for |
+|---|---|
+| `ρ(i, j)` | correlation of assets i and j: +1 move together, 0 unrelated, −1 opposite |
+| `Cov(r_i, r_j)` | how the two monthly returns move together |
+| `σ_i` | volatility of asset i |
+
+**Example:** Feb 2000 – Jan 2010 (the first window the optimisers see): Nifty–Gold **0.09**, Nifty–Liquid **-0.27**, Gold–Liquid **-0.09**. All low or negative: when Nifty falls, the other two usually don't (diversification).
+
+**Code:** [`00_raw_data/build_returns.py` line 35](../00_raw_data/build_returns.py#L35): `corr = first_window.corr()`
+
+## 3. The output: `monthly_returns.csv`
+
+**239 months (Feb 2000 – Dec 2019) × 3 assets**, as decimals (0.0093 = 0.93%):
+
+| Month | Nifty | Gold | Liquid |
 |---|---|---|---|
-| 1983-02 | 0.0213 | −0.0069 | 0.0208 |
-| 1983-03 | 0.0387 | 0.0217 | −0.1446 |
+| 2010-01 | -0.0603 | -0.0181 | 0.0032 |
+| **2010-02 (first SIP month)** | **0.0093** | **0.0317** | **0.0031** |
 
-**How the strategies use it:**
+| 2000–2019 | Nifty (with dividends) | Gold (₹) | Liquid |
+|---|---|---|---|
+| Return per year | 12.4% | 11.5% | 7.0% |
+| Volatility per year | 22.6% | 16.7% | 0.5% |
+
+**Why the SIP starts in Feb 2010.** Strategies 4–6 need the previous **120 months** of
+returns before they can decide a split. The data starts in Feb 2000, so the first possible
+decision is Feb 2010. All six strategies use the same **119 months (Feb 2010 – Dec 2019)**.
 
 | Used for | How |
 |---|---|
-| Deciding the split (strategies 4–6) | The previous 120 months give the average return μ, volatility σ and covariance Σ |
-| Running every SIP (all six) | Each month's holdings grow by (1 + r) |
-| All results | XIRR, drawdowns and crash tests all come from the SIP values built on these returns |
+| Deciding the split (strategies 4–6) | The previous 120 months give μ (average return) and Σ (covariance) |
+| Running every SIP (all six) | Each month the holdings grow by (1 + r) |
+| All results | XIRR, drawdowns and stress tests come from the SIP values built on these returns |
 
-The SIPs start in **Feb 1983**, the first month with 10 years of history before it, so
-all six strategies use the same 522 months.
+## 4. Data verification
+
+`python 00_raw_data/verify_data.py` re-runs these checks (it downloads the reference files):
+
+| Check | Reference | Result |
+|---|---|---|
+| Nifty closes, every trading day | NSE-sourced data 1990–2019 ([Sdaas/nifty-analysis](https://github.com/Sdaas/nifty-analysis)) | 4,812 days, **99.94% identical**. The only 3 differences are special weekend sessions (28 Apr 2012, Muhurat trading 3 Nov 2013 and 7 Nov 2018), none at a month end |
+| Nifty closes 2015–2019 | Second NSE download ([abulbasar/data](https://github.com/abulbasar/data)) | 1,233 days, **99.92% identical** (only 7 Nov 2018 differs) |
+| Gold (USD) | Monthly gold price series ([datasets/gold-prices](https://github.com/datasets/gold-prices)) | Monthly averages within **0.33%** on average → confirms the column is **USD/oz** |
+| USD/INR | FRED DEXINUS | Used directly (it is the reference) |
+| Liquid | Implied daily rate × 365 | Steps weekly (like weekly 91-day T-bill auctions): 9.25% (Jan 2000), 3.3% (2009), a spike to 12% in Aug 2013 (rupee crisis), 5–6% in 2019. Consistent with 91-day T-bill history; no downloadable T-bill series was reachable to match it day by day |
 
 ## How to rebuild
 
 ```bash
-python 00_raw_data/build_returns.py
+python 00_raw_data/build_returns.py     # writes monthly_returns.csv, monthly_prices.csv, correlations_2000_2010.csv
+python 00_raw_data/verify_data.py       # optional: re-check against the public sources (needs internet)
 ```
-
-The code is `sip/data.py` (`equity_total_return`, `bond_total_return`, `gold_return`,
-`load_returns`). A unit test checks that the saved tables match a fresh build from the
-raw files.
 
 ## Limitations
 
-- These are **US** assets (optionally viewed in rupees). Free Indian series (Nifty TRI,
-  G-sec index, domestic gold) only go back about 15–20 years, which is too short for a
-  strategy that needs 10 years of history before it starts.
-- Shiller's S&P 500 prices are **monthly averages** of daily closes, which slightly smooths
-  volatility.
-- The bond fund is **simulated** from yields (no trading costs or credit risk).
-- The latest dividends in Shiller's file are not yet published; the last known dividend
-  yield is carried **forward** (never backward, so no look-ahead).
+- **Nifty dividends are a constant 1.3% a year**, not the actual dividends paid.
+- **Gold is international gold in rupees.** Indian domestic gold (e.g. Gold BeES) also carries
+  import duty, which rose from about 2% to 12.5% during 2012–2019, so domestic gold did slightly
+  better than this series.
+- **Liquid is an index built from the T-bill yield**, not an actual fund, so it has no fund
+  expenses or credit risk.
+- **Month-end sampling:** the last calendar day of the month is used; on weekends that is the
+  Friday close repeated in the file.
