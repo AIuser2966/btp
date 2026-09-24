@@ -1,8 +1,8 @@
 # A Simple Optimized SIP Strategy for Multi-Asset Allocation, Based on Back-Tested Data
 
-All numbers below come from `python run_backtest.py` (USD) and
-`python run_backtest.py --currency INR`. Complete tables are in `results/usd/results.md`
-and `results/inr/results.md`.
+All numbers below come from `python run_all.py` (each strategy folder `01_`–`06_` plus
+`07_comparison/`). Complete tables are in `07_comparison/results/usd/results.md`
+and `07_comparison/results/inr/results.md`.
 
 ---
 
@@ -21,7 +21,7 @@ re-optimization per year, three assets and one rebalancing rule.
 
 ## 2. Data
 
-| Asset | Source (bundled in `data/raw/`) | How the monthly total return is built |
+| Asset | Source (bundled in `00_raw_data/raw/`) | How the monthly total return is built |
 |---|---|---|
 | **Equity** | Shiller S&P 500 price and dividends | price change + 1/12 of the annual dividend. The latest dividend yield is carried forward where the file shows 0 |
 | **Bonds** | US 10-year Treasury yield (FRED) | a synthetic *constant-maturity bond fund*: buy a 10-year par bond at yield *y(t−1)*, re-price it a month later at *y(t)* with 9 11/12 years left, and add one month of coupon |
@@ -121,10 +121,10 @@ how badly that approach does out of sample.
 | Max-Sharpe SIP | 44.8 M | 8.1% | 6.1% | 1.37 | −17.5% | −17.2% | 8.8% |
 | **Optimized SIP** | 40.7 M | 7.8% | 5.7% | 1.42 | −17.0% | −16.6% | 4.7% |
 
-Total invested was 5.22 M in every strategy. Figures: `results/usd/wealth.png`,
+Total invested was 5.22 M in every strategy. Figures: `07_comparison/results/usd/wealth.png`,
 `drawdown.png` and `weights.png`.
 
-For an Indian investor running a rupee SIP (`results/inr/`), the ranking is the same.
+For an Indian investor running a rupee SIP (`07_comparison/results/inr/`), the ranking is the same.
 All returns are higher because the rupee fell from 8 to 95 per USD. The Optimized SIP
 earns 13.8% XIRR with a worst account fall of only −9.0%, against 16.9% and −38.4% for
 pure equity.
@@ -190,7 +190,7 @@ position without hindsight, whereas the grey points need to know the future to p
 
 ### 5.6 Machine-learning return forecasts (extension)
 
-Details are in `FORECASTING.md`. Ridge, random-forest and gradient-boosting models,
+Details are in `extras/ai_forecasting/README.md`. Ridge, random-forest and gradient-boosting models,
 trained walk-forward on 13 market features, forecast each asset's next-12-month return.
 The forecasts then replaced the trailing average in the max-Sharpe half of the
 Optimized SIP.
@@ -249,7 +249,7 @@ times the turnover. The simple Optimized SIP remains the recommendation.
 
 ## 8. Possible extensions
 
-* ~~Machine-learning return forecasts~~: done, see §5.6 and `FORECASTING.md`.
+* ~~Machine-learning return forecasts~~: done, see §5.6 and `extras/ai_forecasting/`.
 * A volatility-target or "risk-profile" version (conservative, moderate or aggressive)
   that maximizes return for a chosen risk budget.
 * Adding a cash/T-bill asset and computing a proper excess-return Sharpe.

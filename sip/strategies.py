@@ -1,35 +1,27 @@
-"""The strategies compared in the study."""
+"""Registry of the six strategies. Each one is defined in its own folder's strategy.py."""
 
 from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
 
 import pandas as pd
 
 from .engine import Strategy
-from .optimize import fixed_weights, walk_forward_weights
 
-EQUITY_ONLY = {"Equity": 1.0, "Bonds": 0.0, "Gold": 0.0}
-EQUAL = {"Equity": 1 / 3, "Bonds": 1 / 3, "Gold": 1 / 3}
-BALANCED = {"Equity": 0.60, "Bonds": 0.20, "Gold": 0.20}
+ROOT = Path(__file__).resolve().parent.parent
+STRATEGY_FOLDERS = ["01_equity_sip", "02_equal_weight_sip", "03_fixed_60_20_20_sip",
+                    "04_risk_parity_sip", "05_max_sharpe_sip", "06_optimized_sip"]
 
 
-def build_strategies(returns: pd.DataFrame, lookback: int = 120, lo: float = 0.10,
-                     hi: float = 0.70, band: float = 0.05) -> list[Strategy]:
-    idx = returns.index
-    rp = walk_forward_weights(returns, "risk_parity", lookback, lo=lo, hi=hi)
-    ms = walk_forward_weights(returns, "max_sharpe", lookback, lo=lo, hi=hi)
-    return [
-        Strategy("Equity SIP", fixed_weights(idx, EQUITY_ONLY),
-                 description="Benchmark: 100% equity, the default single-fund SIP."),
-        Strategy("Equal-weight SIP", fixed_weights(idx, EQUAL),
-                 description="Naive 1/3 each; instalment split equally, never rebalanced."),
-        Strategy("60/20/20 annual rebal", fixed_weights(idx, BALANCED), rebalance="calendar",
-                 description="Classic static mix, sold back to target every 12 months."),
-        Strategy("Risk-parity SIP", rp, contribution="smart", rebalance="band", band=band,
-                 description="Walk-forward equal-risk weights, smart instalments, 5% band."),
-        Strategy("Max-Sharpe SIP", ms, contribution="smart", rebalance="band", band=band,
-                 description="Walk-forward max-Sharpe weights (10-70%), smart instalments, 5% band."),
-        Strategy("Optimized SIP", (rp + ms) / 2, contribution="smart", rebalance="band",
-                 band=band,
-                 description="PROPOSED: average of risk-parity and max-Sharpe targets "
-                             "(10-70%), smart instalments, 5% band."),
-    ]
+def load_strategy_module(folder: str):
+    path = ROOT / folder / "strategy.py"
+    spec = importlib.util.spec_from_file_location(f"strategy_{folder}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def build_strategies(returns: pd.DataFrame, lookback: int = 120) -> list[Strategy]:
+    """All six strategies, in folder order, built from their own strategy.py files."""
+    return [load_strategy_module(f).build(returns, lookback=lookback) for f in STRATEGY_FOLDERS]

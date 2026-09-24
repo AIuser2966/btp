@@ -87,7 +87,7 @@ ax.text(2, H - 5.2, "Data flows top to bottom. Each box names the file / functio
 
 # ---------------------------------------------------------------- 1. raw data
 y1 = 172
-layer(1, y1, 98, 14, C_DATA, "① Raw data", "data/raw/*.csv  (bundled, 1973 → 2026, monthly)")
+layer(1, y1, 98, 14, C_DATA, "① Raw data", "00_raw_data/  (bundled, 1973 → 2026, monthly)")
 raw = [("S&P 500 (Shiller)", "price $P_t$,  dividend $D_t$ (annual)"),
        ("US 10-year Treasury (FRED)", "yield $y_t$"),
        ("Gold (USD / oz)", "price $P_t$"),
@@ -151,7 +151,7 @@ arrow(43.25, y3 + 18.5, 43.25, y3 + 16.9, C_OPT, lw=1.3)
 arrow(29.5, y3 + 10.5, 29.5, y3 + 9.1, C_OPT, lw=1.3)
 
 # ---------------------------------------------------------------- 3b. ML extension
-layer(60, y3, 39, 49, C_ML, "③b ML forecasts (extension)", "sip/forecast.py")
+layer(60, y3, 39, 49, C_ML, "③b ML forecasts (extension)", "extras/ai_forecasting/")
 box(61.5, y3 + 35.5, 36, 9.5, "Features $X_j$  (build_features, 13 inputs)", [
     (r"momentum $\frac{G_j}{G_{j-3}}-1,\ \frac{G_j}{G_{j-12}}-1$    vol $\mathrm{std}_{12}\sqrt{12}$",
      0.6, 10.5),
@@ -178,7 +178,7 @@ arrow(79.5, y2 + 1.3, 79.5, y3 + 49, C_RET)
 # ---------------------------------------------------------------- 4. strategies
 y4 = 72
 layer(1, y4, 98, 11.5, C_STRAT, "④ Strategies = target weights + money rule + rebalance rule",
-      "sip/strategies.py")
+      "folders 01_ … 06_  ·  strategy.py")
 chips = [("Equity SIP", "100/0/0"), ("Equal-weight", "⅓ each, never rebal."),
          ("60/20/20", "pro-rata, yearly rebal."), ("Risk-parity SIP", r"$w^{RP}$, smart, 5% band"),
          ("Max-Sharpe SIP", r"$w^{MS}$, smart, 5% band"),
@@ -255,9 +255,9 @@ box(61.5, y6 + 12.3, 36, 17.5, None, [
     (r"Crises (1987, 2000, 2008, 2020, 2022):  $\prod(1+TWR_t)-1$", 0, 10)],
     colour=C_ANA, gap=3.2)
 layer(60, y6, 39, 10, C_OUT, "⑧ Outputs", "")
-ax.text(61.5, y6 + 5.6, "run_backtest.py · run_forecast.py → results/*  (tables, charts)",
+ax.text(61.5, y6 + 5.6, "07_comparison/run.py · each folder's results/  (tables, charts)",
         fontsize=9.8, color=INK, va="top")
-ax.text(61.5, y6 + 3.0, "recommend.py → this month's split  ·  tests/ 18 checks",
+ax.text(61.5, y6 + 3.0, "06_optimized_sip/recommend.py → this month's split  ·  20 tests",
         fontsize=9.8, color=INK, va="top")
 arrow(29.5, y5, 29.5, y6 + 35, C_ENG)
 arrow(79.5, y5, 79.5, y6 + 35, C_ENG)

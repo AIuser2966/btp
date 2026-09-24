@@ -236,3 +236,61 @@ def importance_chart(imp: pd.DataFrame, path: Path, model: str):
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
+
+
+# ---- single-strategy charts (used by each strategy folder) ----------------------
+
+def strategy_value_chart(res, path: Path, colour: str, currency: str):
+    _style()
+    fig, ax = plt.subplots(figsize=(10, 4.8))
+    invested = res.contributions.cumsum()
+    ax.plot(_ts(invested.index), invested, color=MUTED, lw=1.5, ls="--", label="Amount invested")
+    ax.plot(_ts(res.total.index), res.total, color=colour, lw=2.2, label="Portfolio value")
+    ax.set_yscale("log")
+    ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.set_title(f"{res.name}: value of a {currency} 10,000/month SIP (log scale)")
+    ax.legend(loc="upper left", fontsize=9)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def strategy_drawdown_chart(res, path: Path, colour: str):
+    _style()
+    g = (1 + res.twr).cumprod()
+    dd = g / g.cummax() - 1
+    fig, ax = plt.subplots(figsize=(10, 3.6))
+    ax.fill_between(_ts(dd.index), dd, 0, color=colour, alpha=0.25, lw=0)
+    ax.plot(_ts(dd.index), dd, color=colour, lw=1.4)
+    worst = dd.idxmin()
+    ax.annotate(f"worst {dd.min():.1%} ({worst})", (_ts(pd.PeriodIndex([worst]))[0], dd.min()),
+                xytext=(8, 0), textcoords="offset points", fontsize=9, color=INK, va="center")
+    ax.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+    ax.set_title(f"{res.name}: fall from previous peak")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def allocation_chart(res, target: pd.DataFrame, path: Path):
+    """Actual share of each asset in the portfolio (area) with the target (dashed)."""
+    _style()
+    w = res.weights
+    t = target.reindex(w.index)
+    fig, ax = plt.subplots(figsize=(10, 3.8))
+    ax.stackplot(_ts(w.index), *[w[c] for c in w.columns],
+                 colors=[ASSET_COLORS.get(c, MUTED) for c in w.columns],
+                 labels=[f"{c} (actual)" for c in w.columns], edgecolor=SURFACE,
+                 linewidth=0.6, alpha=0.9)
+    cum = t.cumsum(axis=1)
+    for c in list(t.columns)[:-1]:
+        ax.plot(_ts(cum.index), cum[c], color=INK, lw=1, ls="--")
+    ax.plot([], [], color=INK, lw=1, ls="--", label="Target split")
+    ax.set_ylim(0, 1)
+    ax.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+    ax.set_title(f"{res.name}: how the money is split over time")
+    ax.legend(loc="upper left", ncol=4, fontsize=8.5)
+    ax.grid(False)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)

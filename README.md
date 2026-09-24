@@ -1,105 +1,67 @@
 # A Simple Optimized SIP Strategy for Multi-Asset Allocation
 
-Degree project (BTP). This project backtests a **Systematic Investment Plan (SIP)**, a fixed
-amount invested every month. The SIP is split across **Equity, Bonds and Gold** and uses
-a simple optimizer that relies only on past data (no look-ahead). Over 43 years of monthly
-data it is compared with the usual alternatives: 100% equity, a naive 1/3 split and a
-static 60/20/20 portfolio.
+Degree project (BTP). A **SIP** (Systematic Investment Plan) invests a fixed amount every
+month. This project asks: **how should each month's 10,000 be split between stocks,
+bonds and gold?** It tests six ways of splitting it on 43 years of real market data
+(Feb 1983 – Jul 2026) and compares them fairly.
 
-**The full explanation of the method, the results and their limitations is in
-[`docs/REPORT.md`](docs/REPORT.md).** For a from-scratch walkthrough of every formula and
-file, see [`docs/EXPLAINED.md`](docs/EXPLAINED.md). The machine-learning extension
-(forecasting future returns) is in [`docs/FORECASTING.md`](docs/FORECASTING.md).
+## How the repository is organised
+
+Read the folders in order. Each strategy folder is self-contained: **explanation at the
+top of its README, the rule in `strategy.py`, and its own `results/`.**
+
+| Folder | What's inside |
+|---|---|
+| [`00_raw_data/`](00_raw_data) | The raw market data and how it becomes monthly returns (formulas + worked example). **Every strategy uses this one table.** |
+| [`01_equity_sip/`](01_equity_sip) | Strategy 1: **100% stocks**, the usual SIP (benchmark) |
+| [`02_equal_weight_sip/`](02_equal_weight_sip) | Strategy 2: **⅓ each** in stocks, bonds and gold, never rebalanced |
+| [`03_fixed_60_20_20_sip/`](03_fixed_60_20_20_sip) | Strategy 3: **60/20/20**, reset once a year |
+| [`04_risk_parity_sip/`](04_risk_parity_sip) | Strategy 4: **risk parity**, an optimizer that gives each asset equal risk |
+| [`05_max_sharpe_sip/`](05_max_sharpe_sip) | Strategy 5: **max Sharpe**, an optimizer that maximizes return per unit of risk |
+| [`06_optimized_sip/`](06_optimized_sip) | Strategy 6: **Optimized SIP**, the average of 4 and 5 |
+| [`07_comparison/`](07_comparison) | **All six side by side**, robustness tests and the conclusion |
+| [`sip/`](sip) | Shared engine used by all six: monthly SIP simulator, optimizers, scoring |
+| [`tests/`](tests) | 20 automated checks (formulas, no look-ahead, data integrity) |
+| [`docs/`](docs) | Architecture diagram, full report, ground-up explanations |
+| [`extras/ai_forecasting/`](extras/ai_forecasting) | Extension (not part of the main study): can ML forecasts improve the SIP? |
+
+Strategies 4–6 are **optimized but not AI**: every year they re-calculate the split from
+the **previous 10 years only** (no look-ahead).
+
+## Headline results (USD, 10,000/month, Feb 1983 – Jul 2026, 5.22 M invested)
+
+| Strategy | Final value | Return/yr (XIRR) | Worst fall | Sharpe | 10-yr SIPs that lost money |
+|---|---|---|---|---|---|
+| 1 · 100% stocks | 119.1 M | **11.3%** | −48.3% | 0.99 | 3.0% |
+| 2 · ⅓ each | 58.5 M | 9.0% | −18.2% | 1.29 | 0% |
+| 3 · 60/20/20 | 73.3 M | 9.8% | −23.4% | 1.29 | 0% |
+| 4 · Risk parity | 39.1 M | 7.7% | **−16.3%** | **1.44** | 0% |
+| 5 · Max Sharpe | 44.8 M | 8.1% | −17.2% | 1.37 | 0% |
+| 6 · Optimized | 40.7 M | 7.8% | −16.6% | 1.42 | 0% |
+
+**Bottom line:** 100% stocks makes the most money but can fall by half. The optimizer
+SIPs (4–6) give the best return per unit of risk and the smallest falls, at the cost of
+lower return. Risk parity alone is marginally the best on risk. A simple ⅓ split is a
+strong benchmark. Details: [`07_comparison/`](07_comparison).
+
+## Run it
+
+```bash
+pip install -r requirements.txt
+python run_all.py            # rebuilds data, all six strategies and the comparison
+python -m pytest -q          # 20 tests
+```
+
+Or run one piece at a time, e.g. `python 04_risk_parity_sip/strategy.py`.
+`python 06_optimized_sip/recommend.py --currency INR --amount 10000` prints this month's
+split for the Optimized SIP.
 
 ## Architecture
 
 ![Architecture and formulas](docs/architecture.png)
 
-Vector versions for the report: [`docs/architecture.pdf`](docs/architecture.pdf), [`docs/architecture.svg`](docs/architecture.svg) (regenerate with `python docs/make_architecture.py`).
+## Further reading
 
-## Quick start
-
-```bash
-pip install -r requirements.txt
-python run_backtest.py                 # USD investor  -> results/usd/
-python run_backtest.py --currency INR  # rupee SIP     -> results/inr/
-python run_forecast.py                 # ML forecasting study -> results/usd/forecast/
-python recommend.py --currency INR --amount 10000   # this month's split
-python -m pytest -q                    # 18 unit tests
-```
-
-Useful options: `--amount 5000`, `--step-up 0.10` (raise the SIP 10% every year),
-`--cost-bps 20`, `--lookback 60`, `--window-years 15`.
-
-Each run writes `results.md` (all tables), CSVs and five charts:
-`wealth.png`, `drawdown.png`, `weights.png`, `rolling_xirr.png` and `frontier.png`.
-
-## The proposed "Optimized SIP" in one paragraph
-
-Every 12 months (each February, because the data starts in Feb 1973), fit two optimizers
-on the **previous 10 years** of monthly returns:
-*risk parity* (each asset contributes equal risk) and *maximum Sharpe ratio*. Each
-optimizer is limited to 10–70% per asset. Average the two sets of weights; that average
-is the target for the year. Each month, invest the SIP instalment in whichever assets are
-**below target** ("smart instalments"). Sell only when an asset drifts more than
-**5 percentage points** from target.
-
-## Headline results (Feb 1983 – Jul 2026, 522 monthly instalments, 10 bps costs)
-
-| USD investor | XIRR | Volatility | Sharpe (rf=0) | Worst fall in account | Worst 10-yr SIP XIRR |
-|---|---|---|---|---|---|
-| Equity SIP | **11.3%** | 12.3% | 0.99 | −48.3% | −7.2% |
-| Equal-weight SIP | 9.0% | 6.9% | 1.29 | −18.2% | 4.8% |
-| 60/20/20 annual rebal | 9.8% | 7.6% | 1.29 | −23.4% | 1.7% |
-| **Optimized SIP** | 7.8% | **5.7%** | **1.42** | **−16.6%** | 3.5% |
-
-In short, the optimized SIP gives up about 3.5 points of XIRR a year compared with pure
-equity. In exchange it cuts the worst fall in the account from about 48% to about 17%, and
-it loses money in none of the 403 rolling 10-year windows (pure equity lost money in
-3% of them). It also beats the classic approach of tuning a fixed mix on the first half of
-the data and keeping it for the second half (8.0% vs 6.4% XIRR out of sample). A naive
-1/3 split is a strong benchmark, as the finance literature on "1/N" portfolios predicts.
-`docs/REPORT.md` covers this honestly.
-
-**Machine-learning extension.** Ridge regression, random forest and gradient boosting
-models were trained walk-forward to forecast each asset's next-12-month return. They can
-predict bonds (out-of-sample R² up to +0.25) but not equity or gold, where they are worse
-than the historical average. Plugged into the optimizer, only Ridge helps, and only
-slightly (XIRR 8.0% vs 7.8%, with three times the selling). A perfect-foresight oracle
-would reach 10.8%. See `docs/FORECASTING.md`.
-
-## Project layout
-
-```
-data/raw/            bundled monthly data (Shiller S&P 500, US 10y yield, gold, USD/INR)
-sip/data.py          builds total-return series (equity + dividends, synthetic bond fund, gold, INR option)
-sip/optimize.py      min-variance / max-Sharpe / risk-parity optimizers + walk-forward scheduler
-sip/engine.py        month-by-month SIP simulator (instalments, smart split, rebalancing, costs)
-sip/strategies.py    the six strategies compared
-sip/metrics.py       XIRR, CAGR, volatility, Sharpe, Sortino, drawdowns, turnover
-sip/analysis.py      rolling windows, static-mix grid search, train/test split, sensitivity, crises
-sip/forecast.py      ML forecasts (features, walk-forward training, accuracy, forecast-driven weights)
-sip/plots.py         charts
-run_backtest.py      runs the main study and writes results/<currency>/
-run_forecast.py      runs the ML study and writes results/<currency>/forecast/
-recommend.py         prints this month's target split and what to buy
-tests/test_sip.py    unit tests (XIRR, engine, optimizers, no look-ahead, forecasts, data sanity)
-docs/REPORT.md       the write-up
-docs/EXPLAINED.md    ground-up explanation of every part
-docs/FORECASTING.md  the machine-learning study
-```
-
-## Using Indian market data
-
-The bundled data is US-market data, since it is the longest freely available multi-asset
-history. With the INR option, it models a rupee investor holding those assets. If you have
-internet access you can load Indian ETFs instead:
-
-```python
-from sip.data import load_yahoo
-rets = load_yahoo({"Equity": "NIFTYBEES.NS", "Bonds": "LTGILTBEES.NS", "Gold": "GOLDBEES.NS"})
-```
-
-Then pass `rets` to `build_strategies` / `run_sip` in the same way as `run_backtest.py`
-does. These ETFs only have about 10–15 years of history, so pass a shorter look-back
-(`lookback=36` or `60`) to `build_strategies`.
+- [`docs/WORKED_EXAMPLE.md`](docs/WORKED_EXAMPLE.md): one investor followed through all 20 steps with real numbers
+- [`docs/EXPLAINED.md`](docs/EXPLAINED.md): every formula explained from the ground up
+- [`docs/REPORT.md`](docs/REPORT.md): the full project report

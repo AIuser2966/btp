@@ -117,8 +117,12 @@ def test_bundled_data_is_sane():
 
 # ---------- forecasting ----------
 
-from sip import forecast as fc  # noqa: E402
-from sip.data import load_macro  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "extras" / "ai_forecasting"))
+import forecast as fc  # noqa: E402
+from sip.data import load_macro, read_returns_table  # noqa: E402
 
 
 def test_targets_are_next_12_months():
@@ -149,3 +153,20 @@ def test_forecast_weights_are_valid():
     w = w.dropna()
     assert np.allclose(w.sum(axis=1), 1.0)
     assert (w.values >= 0.10 - 1e-6).all() and (w.values <= 0.70 + 1e-6).all()
+
+
+# ---------- repository layout ----------
+
+def test_returns_table_matches_raw_data():
+    for currency in ("USD", "INR"):
+        built = load_returns(currency)
+        table = read_returns_table(currency)
+        assert (built.index == table.index).all()
+        assert np.abs(built.values - table.values).max() < 1e-7
+
+
+def test_six_strategy_folders_load():
+    from sip.strategies import build_strategies
+    names = [s.name for s in build_strategies(read_returns_table())]
+    assert names == ["Equity SIP", "Equal-weight SIP", "60/20/20 annual rebal",
+                     "Risk-parity SIP", "Max-Sharpe SIP", "Optimized SIP"]

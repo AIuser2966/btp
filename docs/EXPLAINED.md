@@ -42,14 +42,14 @@ A simpler text version of the same flow:
 
 ```mermaid
 flowchart LR
-    A["data/raw/*.csv<br/>(prices, yields, FX)"] --> B["sip/data.py<br/>monthly returns"]
+    A["00_raw_data/raw/*.csv<br/>(prices, yields, FX)"] --> B["sip/data.py<br/>monthly returns"]
     B --> C["sip/optimize.py<br/>target weights"]
-    C --> D["sip/strategies.py<br/>6 strategies"]
+    C --> D["01_ … 06_ folders<br/>strategy.py (6 strategies)"]
     B --> E["sip/engine.py<br/>month-by-month SIP simulator"]
     D --> E
     E --> F["sip/metrics.py<br/>XIRR, Sharpe, drawdown..."]
     E --> G["sip/analysis.py<br/>rolling, train/test, sensitivity, crises"]
-    F --> H["run_backtest.py<br/>writes results/ + charts"]
+    F --> H["07_comparison/run.py<br/>writes results/ + charts"]
     G --> H
     H --> I["sip/plots.py<br/>PNG charts"]
 ```
@@ -63,21 +63,21 @@ Read it left to right:
 5. the **engine** simulates the SIP month by month →
 6. **metrics** grade the result →
 7. **analysis** repeats the experiment many ways to check it wasn't luck →
-8. **run_backtest.py** runs everything and saves tables and charts.
+8. **07_comparison/run.py** runs all six side by side and saves tables and charts.
 
 ### 1.2 The files and their jobs
 
 | File | One-line job | Kitchen analogy |
 |---|---|---|
-| `data/raw/*.csv` | Raw historical data (bundled, so it works offline) | Groceries |
+| `00_raw_data/raw/*.csv` | Raw historical data (bundled, so it works offline) | Groceries |
 | `sip/data.py` | Clean the data and turn prices into monthly returns | Washing and chopping |
 | `sip/optimize.py` | Maths that picks the best split of money | The recipe |
-| `sip/strategies.py` | Define the 6 strategies we compare | The 6 dishes on the menu |
+| `01_…/strategy.py` to `06_…/strategy.py` | The 6 strategies we compare, one per folder | The 6 dishes on the menu |
 | `sip/engine.py` | Simulate investing month by month | The stove |
 | `sip/metrics.py` | Score each strategy | The taste test |
 | `sip/analysis.py` | Re-run in many conditions to test robustness | Cooking it 400 times to be sure |
 | `sip/plots.py` | Draw the charts | Plating |
-| `run_backtest.py` | Runs all of the above in order | The head chef |
+| `07_comparison/run.py` | Runs all six and the robustness tests | The head chef |
 | `tests/test_sip.py` | Automated checks that the maths is right | Food-safety inspection |
 
 ### 1.3 Design choices and why
@@ -315,7 +315,7 @@ are **66 combinations**. It is used in Part 7 to test all fixed mixes.
 
 ---
 
-## Part 4: The six strategies (`sip/strategies.py`)
+## Part 4: The six strategies (folders `01_` to `06_`, each with its own `strategy.py`)
 
 A **strategy** = a **target weights table** + **how the monthly money is invested** +
 **when to rebalance**.
@@ -571,9 +571,9 @@ the 2022 rate shock.
 
 ---
 
-## Part 8: The runner and outputs (`run_backtest.py`, `sip/plots.py`)
+## Part 8: The runner and outputs (`07_comparison/run.py`, `sip/plots.py`)
 
-`python run_backtest.py [--currency INR] [--amount …] [--step-up …] [--cost-bps …] [--lookback …] [--window-years …]`
+`python 07_comparison/run.py [--currency INR] [--amount …] [--step-up …] [--cost-bps …] [--lookback …] [--window-years …]`
 
 In order, it:
 
@@ -604,8 +604,8 @@ In order, it:
 
 ## Part 9: The tests (`tests/test_sip.py`)
 
-18 automated checks, run with `python -m pytest -q` (the 3 forecasting tests are
-explained in `FORECASTING.md`):
+20 automated checks, run with `python -m pytest -q` (the 3 forecasting tests are
+explained in `extras/ai_forecasting/README.md`; 2 more check the repository layout):
 
 | Test | What it proves |
 |---|---|
@@ -648,8 +648,8 @@ explained in `FORECASTING.md`):
 
 ## Part 11: The machine-learning extension
 
-A separate study (`sip/forecast.py`, `run_forecast.py`) tries to **predict next year's
+A separate study (`extras/ai_forecasting/`) tries to **predict next year's
 return** of each asset with Ridge regression, random forest and gradient boosting, then
 feeds the predictions into the optimizer. It's explained from the ground up, in the same
-style as this document, in **`FORECASTING.md`**. `recommend.py` turns the strategy into
+style as this document, in **`extras/ai_forecasting/README.md`**. `06_optimized_sip/recommend.py` turns the strategy into
 a monthly "what should I buy" tool.

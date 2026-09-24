@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
+RAW_DIR = Path(__file__).resolve().parent.parent / "00_raw_data" / "raw"
 ASSETS = ["Equity", "Bonds", "Gold"]
 
 
@@ -130,3 +130,20 @@ def load_macro(raw_dir: Path = RAW_DIR) -> pd.DataFrame:
     dy = (sp["Dividend"] / sp["SP500"]).replace(0.0, np.nan).ffill()
     return pd.concat([(y["Rate"] / 100.0).rename("bond_yield"), dy.rename("div_yield"),
                       usdinr(raw_dir).rename("usdinr")], axis=1)
+
+
+DATA_DIR = RAW_DIR.parent
+
+
+def returns_table_path(currency: str = "USD") -> Path:
+    return DATA_DIR / f"monthly_returns_{currency.lower()}.csv"
+
+
+def read_returns_table(currency: str = "USD") -> pd.DataFrame:
+    """The prepared returns table from ``00_raw_data/`` (built by build_returns.py).
+
+    Every strategy reads this one file, so all six use exactly the same data.
+    """
+    df = pd.read_csv(returns_table_path(currency), index_col="Month")
+    df.index = pd.PeriodIndex(df.index, freq="M")
+    return df[ASSETS]

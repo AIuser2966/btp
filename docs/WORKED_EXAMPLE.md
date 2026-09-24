@@ -37,7 +37,7 @@ Here's what the files contain for your first two months:
 | Jan 1983 | 144.30 | 6.883 | 10.46% | 481 | 9.79 |
 | Feb 1983 | 146.80 | 6.897 | 10.72% | 491 | 9.92 |
 
-These are stored in `data/raw/`, so anyone can rerun the project and get identical
+These are stored in `00_raw_data/raw/`, so anyone can rerun the project and get identical
 numbers.
 
 ### Step 4: Turn prices into monthly returns (equity and gold)
