@@ -465,8 +465,10 @@ STRATEGY_TEXT = [
          rule="1. Every month, invest the full ₹10,000 in **Nifty 50** (dividends included).\n2. Never sell, never rebalance.",
          behaviour="The allocation chart is one block: 100% Nifty for ten years. All the risk comes from one asset.",
          good="- **Highest return** of the six (XIRR {xirr}).\n- Simplest rule; nothing is ever sold.",
-         bad="- **Biggest falls**: the strategy fell {mdd} from its peak in 2011, and {c2011} over 2011 alone.\n"
-             "- Returned only about {extra} a year more than simply holding Liquid, for five times the volatility."),
+         bad="- **Biggest falls**: the strategy fell {mdd} from its peak (during 2011), and {c2015} in the "
+             "2015-16 sell-off.\n"
+             "- Earned about {extra} a year more than a 100% Liquid SIP ({liq}), but with {vol} volatility "
+             "against about 0.5% for Liquid."),
     dict(title="Equal-weight SIP (⅓ each)",
          idea="Split every instalment equally between Nifty, gold and liquid and never touch it.",
          rule="1. Every month, invest **₹3,333 in each** of Nifty, Gold and Liquid.\n2. Never sell, never rebalance.",
@@ -538,7 +540,7 @@ def strategy_readme(key: int) -> str:
     liq = sip_xirr(LIQUID_SIP)
     yrs = ", ".join(f"{str(p)[:4]}: " + "/".join(f"{v:.0%}" for v in s.target.loc[p].values)
                     for p in IDX[::12][:3]) + " …"
-    fmt = dict(xirr=P(m["XIRR"]), mdd=P(m["Max drawdown"]), worst=P(m["Worst wealth drop"]),
+    fmt = dict(xirr=P(m["XIRR"]), mdd=P(m["Max drawdown"]), vol=P(m["Volatility"]), worst=P(m["Worst wealth drop"]),
                shl=f"{m['Sharpe vs Liquid']:.2f}", shl3=f"{m3['Sharpe vs Liquid']:.2f}",
                shl1=f"{m1['Sharpe vs Liquid']:.2f}", turn=P(m["Annual sell turnover"]),
                nreb=int((res.sold > 0).sum()), liq=P(liq), vsliq=P(m["XIRR"] - liq),

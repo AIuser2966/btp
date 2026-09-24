@@ -278,8 +278,8 @@ Sell turnover = Σ_t sold_t / mean(V_t) / years
 - Simplest rule; nothing is ever sold.
 
 **Weaknesses**
-- **Biggest falls**: the strategy fell -23.7% from its peak in 2011, and -23.7% over 2011 alone.
-- Returned only about 4.4% a year more than simply holding Liquid, for five times the volatility.
+- **Biggest falls**: the strategy fell -23.7% from its peak (during 2011), and -20.5% in the 2015-16 sell-off.
+- Earned about 4.4% a year more than a 100% Liquid SIP (7.3%), but with 15.3% volatility against about 0.5% for Liquid.
 
 ## Files in this folder
 
