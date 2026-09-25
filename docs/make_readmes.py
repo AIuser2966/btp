@@ -48,7 +48,7 @@ def N(v, d=2):
 
 
 def line_of(rel_file: str, snippet: str) -> int:
-    lines = (ROOT / rel_file).read_text().splitlines()
+    lines = (ROOT / rel_file).read_text(encoding="utf-8").splitlines()
     hits = [i + 1 for i, text in enumerate(lines) if snippet in text]
     if len(hits) != 1:
         raise ValueError(f"{snippet!r} found {len(hits)} times in {rel_file}")
@@ -57,7 +57,7 @@ def line_of(rel_file: str, snippet: str) -> int:
 
 def code(rel_file: str, snippet: str, prefix: str) -> str:
     n = line_of(rel_file, snippet)
-    text = (ROOT / rel_file).read_text().splitlines()[n - 1].strip()
+    text = (ROOT / rel_file).read_text(encoding="utf-8").splitlines()[n - 1].strip()
     return f"[`{rel_file}` line {n}]({prefix}{rel_file}#L{n}): `{text}`"
 
 
@@ -761,7 +761,7 @@ def comparison_readme() -> str:
     tt = pd.read_csv(d / "train_test.csv", index_col=0)
     cr = pd.read_csv(d / "crisis.csv", index_col=0)
     sens = pd.read_csv(d / "sensitivity.csv")
-    md = (d / "results.md").read_text()
+    md = (d / "results.md").read_text(encoding="utf-8")
     best = md.split("Best fixed mix on train (highest Sharpe vs Liquid): ")[1].split("\n")[0]
     hind = md.split("over the full period (highest Sharpe vs Liquid): ")[1].split("\n")[0]
     liq = sip_xirr(LIQUID_SIP)
@@ -985,7 +985,7 @@ def worked_example() -> str:
     rs = pd.read_csv(ROOT / "07_comparison" / "results" / "rolling_summary.csv", index_col=0)
     tt = pd.read_csv(ROOT / "07_comparison" / "results" / "train_test.csv", index_col=0)
     cr = pd.read_csv(ROOT / "07_comparison" / "results" / "crisis.csv", index_col=0)
-    md = (ROOT / "07_comparison" / "results" / "results.md").read_text()
+    md = (ROOT / "07_comparison" / "results" / "results.md").read_text(encoding="utf-8")
     best = md.split("Best fixed mix on train (highest Sharpe vs Liquid): ")[1].split("\n")[0]
     data = data_readme()
     part_a = data.split("## 2. The formulas: how each monthly return is built")[1].split("## 3. The output")[0]
@@ -1097,12 +1097,12 @@ fund into a 70% cash portfolio. Very safe, but not better per unit of risk than 
 
 
 def main():
-    (ROOT / "00_raw_data" / "README.md").write_text(data_readme())
-    (ROOT / "docs" / "WORKED_EXAMPLE.md").write_text(worked_example())
+    (ROOT / "00_raw_data" / "README.md").write_text(data_readme(), encoding="utf-8")
+    (ROOT / "docs" / "WORKED_EXAMPLE.md").write_text(worked_example(), encoding="utf-8")
     for k, folder in enumerate(STRATEGY_FOLDERS):
-        (ROOT / folder / "README.md").write_text(strategy_readme(k))
-    (ROOT / "07_comparison" / "README.md").write_text(comparison_readme())
-    (ROOT / "README.md").write_text(top_readme())
+        (ROOT / folder / "README.md").write_text(strategy_readme(k), encoding="utf-8")
+    (ROOT / "07_comparison" / "README.md").write_text(comparison_readme(), encoding="utf-8")
+    (ROOT / "README.md").write_text(top_readme(), encoding="utf-8")
     print("READMEs regenerated.")
 
 

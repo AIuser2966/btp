@@ -120,7 +120,7 @@ def run_strategy_folder(build: Callable[[pd.DataFrame], Strategy], folder: Path,
         "Charts: `value.png`, `drawdown.png`, `allocation.png`. "
         "Month-by-month detail: `monthly.csv`.",
     ]
-    (out / "summary.md").write_text("\n".join(md) + "\n")
+    (out / "summary.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     print(f"{strategy.name}: final {metrics['Final value']:,.0f} on "
           f"{metrics['Invested']:,.0f} | XIRR {metrics['XIRR']:.2%} | "
           f"Sharpe {metrics['Sharpe']:.2f} (vs Liquid {metrics['Sharpe vs Liquid']:.2f}) | worst fall {metrics['Worst wealth drop']:.1%}")

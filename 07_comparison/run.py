@@ -25,6 +25,9 @@ from sip.metrics import summary_table  # noqa: E402
 from sip.strategies import build_strategies  # noqa: E402
 
 def main():
+    # print the rupee sign safely even on Windows terminals that are not UTF-8
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--amount", type=float, default=10_000)
     p.add_argument("--step-up", type=float, default=0.0, help="yearly SIP increase, e.g. 0.1")
@@ -102,7 +105,7 @@ def main():
         "## Hindsight reference\n",
         f"Best fixed mix with perfect hindsight over the full period (highest Sharpe vs Liquid): {hindsight}",
     ]
-    (out / "results.md").write_text("\n".join(report) + "\n")
+    (out / "results.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     print("\n".join(report))
 
 

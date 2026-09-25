@@ -190,3 +190,16 @@ def test_six_strategy_folders_load():
     names = [s.name for s in build_strategies(read_returns_table())]
     assert names == ["Equity SIP", "Equal-weight SIP", "60/20/20 annual rebal",
                      "Risk-parity SIP", "Max-Sharpe SIP", "Optimized SIP"]
+
+
+def test_text_files_are_read_and_written_as_utf8():
+    # Windows defaults to cp1252, which cannot store the rupee sign; every text read/write
+    # in the project must name the encoding explicitly.
+    import re
+    root = Path(__file__).resolve().parents[1]
+    bad = []
+    for f in root.rglob("*.py"):
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"\.(write_text|read_text)\(", line) and "encoding=" not in line:
+                bad.append(f"{f.relative_to(root)}:{n}")
+    assert not bad, bad

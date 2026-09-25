@@ -31,6 +31,9 @@ ORACLE = "Oracle (perfect foresight)"
 
 
 def main():
+    # print the rupee sign safely even on Windows terminals that are not UTF-8
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--currency", default="USD", choices=["USD", "INR"])
     p.add_argument("--amount", type=float, default=10_000)
@@ -117,7 +120,7 @@ def main():
         f"## B2. Rolling {args.window_years}-year SIPs\n", fmt(rsum), "",
         "## B3. Stress periods\n", fmt(crisis),
     ]
-    (out / "forecast_results.md").write_text("\n".join(report) + "\n")
+    (out / "forecast_results.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     print("\n".join(report))
 
 

@@ -3,6 +3,7 @@
     python run_all.py
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,8 +21,11 @@ STEPS = [
     ["docs/make_readmes.py"],
 ]
 
+# UTF-8 mode, so the rupee sign (₹) can be written on Windows too (default there is cp1252)
+ENV = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
+
 for step in STEPS:
     print(f"\n=== {' '.join(step)}")
-    subprocess.run([sys.executable, str(ROOT / step[0]), *step[1:]], check=True,
+    subprocess.run([sys.executable, str(ROOT / step[0]), *step[1:]], check=True, env=ENV,
                    stdout=subprocess.DEVNULL if step[0].startswith("07") else None)
 print("\nDone. Results are in each folder's results/ directory.")
