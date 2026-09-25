@@ -66,4 +66,5 @@ next instalment (from the latest data, Dec 2019).
 ## Further reading
 
 - [`docs/WORKED_EXAMPLE.md`](docs/WORKED_EXAMPLE.md): one investor followed through all 20 steps with real numbers
+- `ENGINE_WALKTHROUGH.md` in each strategy folder (e.g. [`01_equity_sip/ENGINE_WALKTHROUGH.md`](01_equity_sip/ENGINE_WALKTHROUGH.md)): plain-language, line-by-line walk through the engine for that strategy, ending with real-number examples
 - [`extras/us_data/`](extras/us_data): the same study on US data 1973–2026 (earlier version, with its own report)

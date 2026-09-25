@@ -2,6 +2,9 @@
 
 > **Idea:** Let a formula choose the split with the most return per unit of risk over the last 10 years (Markowitz).
 
+📖 **New to this?** [`ENGINE_WALKTHROUGH.md`](ENGINE_WALKTHROUGH.md) follows the computer step by step
+through this strategy in plain language, with real rupee amounts.
+
 ## The rule
 
 1. Every 12 months, look at **only the previous 120 months**.
@@ -348,6 +351,7 @@ Sell turnover = Σ_t sold_t / mean(V_t) / years
 | File | What it is |
 |---|---|
 | `strategy.py` | **The rule, in code.** Run it to regenerate `results/` |
+| `ENGINE_WALKTHROUGH.md` | Plain-language, step-by-step walk through the engine for this strategy, with real numbers |
 | `results/summary.md` | All results on one page (also `summary.csv`) |
 | `results/monthly.csv` | Month by month: instalment, rupees in each asset, target and actual split, bought/sold, costs |
 | `results/rolling_5y_windows.csv` | XIRR and worst fall of every 5-year SIP |

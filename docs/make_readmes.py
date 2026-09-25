@@ -362,6 +362,7 @@ FILES = """## Files in this folder
 | File | What it is |
 |---|---|
 | `strategy.py` | **The rule, in code.** Run it to regenerate `results/` |
+| `ENGINE_WALKTHROUGH.md` | Plain-language, step-by-step walk through the engine for this strategy, with real numbers |
 | `results/summary.md` | All results on one page (also `summary.csv`) |
 | `results/monthly.csv` | Month by month: instalment, rupees in each asset, target and actual split, bought/sold, costs |
 | `results/rolling_{w}y_windows.csv` | XIRR and worst fall of every {w}-year SIP |
@@ -552,6 +553,9 @@ def strategy_readme(key: int) -> str:
     return f"""# Strategy {key + 1}: {tx['title']}
 
 > **Idea:** {tx['idea']}
+
+📖 **New to this?** [`ENGINE_WALKTHROUGH.md`](ENGINE_WALKTHROUGH.md) follows the computer step by step
+through this strategy in plain language, with real rupee amounts.
 
 ## The rule
 
@@ -972,6 +976,7 @@ next instalment (from the latest data, Dec 2019).
 ## Further reading
 
 - [`docs/WORKED_EXAMPLE.md`](docs/WORKED_EXAMPLE.md): one investor followed through all 20 steps with real numbers
+- `ENGINE_WALKTHROUGH.md` in each strategy folder (e.g. [`01_equity_sip/ENGINE_WALKTHROUGH.md`](01_equity_sip/ENGINE_WALKTHROUGH.md)): plain-language, line-by-line walk through the engine for that strategy, ending with real-number examples
 - [`extras/us_data/`](extras/us_data): the same study on US data 1973–2026 (earlier version, with its own report)
 """
 
@@ -1096,11 +1101,398 @@ fund into a 70% cash portfolio. Very safe, but not better per unit of risk than 
 """
 
 
+# --------------------------------------------------------------------------- ENGINE_WALKTHROUGH.md
+def src(rel_file: str, snippet: str) -> str:
+    """A code line shown as a small block with its file and line number."""
+    n = line_of(rel_file, snippet)
+    text = (ROOT / rel_file).read_text(encoding="utf-8").splitlines()[n - 1].strip()
+    return f"```python\n# {rel_file}, line {n}\n{text}\n```"
+
+
+def trace_month(s: Strategy, res, t: int) -> dict:
+    """Redo month t of the engine step by step (same maths as sip/engine.py) and check it."""
+    w = s.target.loc[str(IDX[t])].values
+    cash = float(CONTRIB.iloc[t])
+    h0 = res.values.iloc[t - 1].values if t > 0 else np.zeros(3)
+    split = _smart_split(h0, w, cash) if s.contribution == "smart" else w * cash
+    h1 = h0 + split
+    drift = float(np.abs(h1 / h1.sum() - w).max())
+    if s.rebalance == "calendar":
+        rebal = (t + 1) % s.rebalance_every == 0
+    elif s.rebalance == "band":
+        rebal = drift > s.band
+    else:
+        rebal = False
+    trade = w * h1.sum() - h1 if rebal else np.zeros(3)
+    h2 = w * h1.sum() if rebal else h1
+    buys = split + np.maximum(trade, 0)
+    sold = float(np.maximum(-trade, 0).sum())
+    cost = (np.maximum(buys, 0).sum() + sold) * COST_BPS / 1e4
+    start = h2.sum()
+    h3 = h2 * (1 - cost / start)
+    r = R.loc[str(IDX[t])].values
+    h4 = h3 * (1 + r)
+    assert np.allclose(h4, res.values.iloc[t].values), (s.name, t)   # must match the engine
+    return dict(month=IDX[t], w=w, cash=cash, h0=h0, split=split, h1=h1, drift=drift, rebal=rebal,
+                trade=trade, h2=h2, sold=sold, cost=cost, start=start, h3=h3, r=r, h4=h4,
+                twr=h4.sum() / start - 1, invested=float(CONTRIB.iloc[:t + 1].sum()))
+
+
+def month_name(p) -> str:
+    return p.strftime("%b %Y")
+
+
+def ledger(s: Strategy, m: dict) -> str:
+    """A month as a table: one row per engine step, one column per jar."""
+    def row(label, v, total=True, fmt=lambda x: M(x, 2)):
+        cells = " | ".join(fmt(x) for x in v)
+        return f"| {label} | {cells} | {fmt(sum(v)) if total else ''} |"
+    rows = [
+        "| Step | Nifty | Gold | Liquid | Total |",
+        "|---|---|---|---|---|",
+        row("① Start of month (last month's end)", m["h0"]),
+        row(f"② Instalment {M(m['cash'])} split into", m["split"]),
+        row("③ Holdings after buying", m["h1"]),
+        "| ③ Split after buying (share of total) | " + " | ".join(P(x) for x in m["h1"] / m["h1"].sum())
+        + " | 100% |",
+    ]
+    if s.rebalance == "none":
+        rows.append("| ④ Rebalance? | rule is \"none\": skipped | | | |")
+    elif s.rebalance == "calendar":
+        rows.append(f"| ④ Rebalance? | {'**yes**, 12th month' if m['rebal'] else 'no, not the 12th month'} | | | |")
+    else:
+        why = (" (the smart instalment filled the gaps exactly)" if m["drift"] < 1e-4 else "")
+        rows.append(f"| ④ Rebalance? | biggest gap from target (drift) {P(m['drift'], 2)}{why}: "
+                    f"{'more' if m['rebal'] else 'not more'} than 5% → {'**yes**' if m['rebal'] else 'no'} | | | |")
+    if m["rebal"]:
+        rows.append(row("④ Trades to get back to target (− = sell)", m["trade"], total=False))
+        rows.append(row("④ Holdings after rebalancing", m["h2"]))
+    traded = m["cost"] * 1000
+    if m["rebal"]:
+        extra_buys = float(np.maximum(m["trade"], 0).sum())
+        fee_note = (f"0.1% of {M(traded, 2)} traded = {M(m['cash'])} instalment + {M(extra_buys, 2)} "
+                    f"rebalance buys + {M(m['sold'], 2)} sales")
+    else:
+        fee_note = f"0.1% of the {M(traded, 2)} bought"
+    rows += [
+        f"| ⑤ Fee: {M(m['cost'], 2)} ({fee_note}) | taken from all jars in proportion | | | −{M(m['cost'], 2)} |",
+        row("⑤ Holdings after fee", m["h3"]),
+        "| ⑥ This month's market return | " + " | ".join(S(x) for x in m["r"]) + " | |",
+        row("⑥ **End of month**", m["h4"]),
+    ]
+    return "\n".join(rows) + (f"\n\nStrategy's own return this month (TWR): {M(m['h4'].sum(), 2)} ÷ "
+                              f"{M(m['start'], 2)} − 1 = **{S(m['twr'])}**. Money paid in so far: "
+                              f"{M(m['invested'])}.")
+
+
+GLOSSARY = """| Word | Meaning |
+|---|---|
+| **SIP** | Investing a fixed amount every month (here ₹10,000 on the 1st, Feb 2010 – Dec 2019, 119 months) |
+| **Instalment** | One monthly payment of ₹10,000 |
+| **Jar / holding** | The rupees currently sitting in one asset (Nifty, Gold or Liquid). The code calls the three jars together `h` |
+| **Target split** | The percentages the strategy wants in each jar, e.g. 60% / 20% / 20% |
+| **Return** | How much an asset grew or shrank in a month, e.g. +0.93% |
+| **Fee** | 0.1% of every rupee bought or sold (₹10 on ₹10,000) |
+| **Rebalance** | Selling from jars that grew too big and buying the ones that shrank, to get back to the target |
+| **Drift** | How far the actual split has wandered from the target (the biggest gap, in percentage points) |
+| **TWR** | "Time-weighted return": the strategy's own return that month, not counting the new money you added |"""
+
+EXTRA_GLOSSARY = {
+    "smart": "| **Smart instalment** | Instead of splitting the ₹10,000 by the target, pour it into the jars that are **below** target first. Keeps the split right without selling |",
+    "band": "| **Band (5%)** | Only rebalance if some jar is more than 5 percentage points away from its target |",
+    "opt": "| **Optimiser** | A calculation that picks the target split from the past 10 years of data. It is re-run every February |\n"
+           "| **Look-back window** | The 120 months of past data the optimiser is allowed to use (never the future) |",
+}
+
+SWITCH_TEXT = {
+    0: ("fixed: 100% Nifty / 0% Gold / 0% Liquid", "pro-rata (split by the target)", "none (never sell)"),
+    1: ("fixed: ⅓ / ⅓ / ⅓", "pro-rata (split by the target)", "none (never sell)"),
+    2: ("fixed: 60% Nifty / 20% Gold / 20% Liquid", "pro-rata (split by the target)", "calendar: every 12 months"),
+    3: ("re-calculated every February by **risk parity** from the past 120 months", "smart (fill the gaps first)", "band: only if drift > 5%"),
+    4: ("re-calculated every February by **max Sharpe** from the past 120 months", "smart (fill the gaps first)", "band: only if drift > 5%"),
+    5: ("re-calculated every February as **½ risk parity + ½ max Sharpe** from the past 120 months",
+        "smart (fill the gaps first)", "band: only if drift > 5%"),
+}
+
+
+def target_steps(key: int) -> str:
+    folder = STRATEGY_FOLDERS[key]
+    if key < 3:
+        return f"""**What it does in plain words:** the strategy writes down its fixed split once, and the
+code copies that same split into every one of the 119 months. Nothing is ever recalculated.
+
+{src(f"{folder}/strategy.py", "WEIGHTS = {")}
+The split, written as fractions of 1 (1.0 = 100%).
+
+{src(f"{folder}/strategy.py", "target = fixed_weights(returns.index, WEIGHTS)")}
+Ask for a table with this split in every month…
+
+{src("sip/optimize.py", "return pd.DataFrame([weights] * len(index), index=index)")}
+…which is made by simply repeating the split once per month."""
+    method = {3: "risk_parity", 4: "max_sharpe"}.get(key)
+    intro = """**What it does in plain words:** the strategy doesn't know its split in advance. Every
+February, a calculator (the *optimiser*) looks at the **previous 120 months only** and works out
+a split. That split is then used for the next 12 months.
+
+"""
+    loop = f"""{src("sip/optimize.py", "if current is None or (i - lookback) % reoptimise_every == 0:")}
+"Is this the first month, or have 12 months passed since the last calculation?" If yes, recalculate:
+
+{src("sip/optimize.py", "current = fn(rets.iloc[i - lookback:i], lo=lo, hi=hi)")}
+Run the optimiser on the 120 months **before** this month (`i - lookback` up to `i`, not
+including month `i` itself), so it can never see the future. Otherwise keep last year's split.
+
+{src("sip/optimize.py", "bounds=[(lo, hi)] * n")}
+{src("sip/optimize.py", 'constraints=({"type": "eq", "fun": lambda w: w.sum() - 1.0},),')}
+Rules every answer must obey: each jar between 10% and 70%, and the three add up to 100%."""
+    rp = f"""{src("sip/optimize.py", "rc = w * (cov @ w)")}
+For a candidate split, work out how much risk each jar contributes.
+
+{src("sip/optimize.py", "return ((rc - rc.mean()) ** 2).sum() * 1e8")}
+Score the split by how *unequal* those risk shares are. The solver keeps adjusting the split
+to make this score as small as possible, i.e. to make every jar's risk share equal."""
+    ms = f"""{src("sip/optimize.py", "return max_sharpe_mu(rets.mean().values - rf / MONTHS, rets.cov().values, lo, hi)")}
+From the 120 months, measure each asset's average return (`mean`) and how the assets wobble
+together (`cov`, the covariance).
+
+{src("sip/optimize.py", "return _solve(lambda w: -(w @ mu) / np.sqrt(w @ cov @ w), len(mu), lo, hi)")}
+Score a split by return ÷ risk. The solver searches for the split with the highest score (the
+minus sign is there because the solver is built to find the *smallest* number)."""
+    def rp_call():
+        return src(f"{folder}/strategy.py",
+                   'walk_forward_weights(returns, "risk_parity", lookback, lo=LOWER, hi=UPPER)')
+
+    def ms_call():
+        return src(f"{folder}/strategy.py",
+                   'walk_forward_weights(returns, "max_sharpe", lookback, lo=LOWER, hi=UPPER)')
+    if key == 3:
+        body = f"{rp_call()}\nAsk for risk-parity splits, recalculated every 12 months.\n\n{loop}\n\n{rp}"
+    elif key == 4:
+        body = f"{ms_call()}\nAsk for max-Sharpe splits, recalculated every 12 months.\n\n{loop}\n\n{ms}"
+    else:
+        blend = src(f"{folder}/strategy.py", "target = 0.5 * risk_parity + 0.5 * max_sharpe")
+        body = (f"{rp_call()}\n{ms_call()}\n"
+                f"Calculate both kinds of split, each recalculated every 12 months.\n\n{loop}\n\n"
+                f"**Risk parity** (the careful one):\n\n{rp}\n\n**Max Sharpe** (the ambitious one):\n\n{ms}\n\n"
+                f"{blend}\nThe target is simply the average of the two splits.")
+    return intro + body
+
+
+def engine_steps(s: Strategy) -> str:
+    smart = s.contribution == "smart"
+    split_expl = (
+        "The rule is **smart**, so the code calls the smart splitter instead:\n\n"
+        f"{src('sip/engine.py', 'total = holdings.sum() + cash')}\n"
+        "Pretend the new money is already in: what would the whole pot be worth?\n\n"
+        f"{src('sip/engine.py', 'gap = np.maximum(target * total - holdings, 0.0)')}\n"
+        "For each jar: how many rupees short of its target share is it? (A jar that is already over "
+        "target counts as 0 short.)\n\n"
+        f"{src('sip/engine.py', 'return gap / need * cash')}\n"
+        "If the jars are short by more than ₹10,000 in total, share the ₹10,000 out in proportion to "
+        "how short each one is…\n\n"
+        f"{src('sip/engine.py', 'return gap + target * (cash - need)')}\n"
+        "…otherwise fill every gap completely and split whatever is left by the target."
+        if smart else
+        "The rule is **pro-rata**, so the code takes the simple option after `else`: "
+        "`w * cash`, i.e. each jar gets its target share of the ₹10,000.")
+    if s.rebalance == "none":
+        reb = ("Both tests are false because this strategy's rule is `\"none\"`, so `do_rebal` stays "
+               "`False` and **nothing is ever sold**. The code jumps straight to the fee.")
+    elif s.rebalance == "calendar":
+        reb = ("The rule is `\"calendar\"`: the first test is true in every 12th month (Jan 2011, "
+               "Jan 2012, …). In those months the code works out the trades below; in the other "
+               "11 months it skips them.\n\n"
+               f"{src('sip/engine.py', 'trade = w * h.sum() - h')}\n"
+               "For each jar: (what it *should* hold) − (what it holds). Positive = buy that much, "
+               "negative = sell that much.\n\n"
+               f"{src('sip/engine.py', 'sold[t] = np.maximum(-trade, 0.0).sum()')}\n"
+               "Add up everything sold (for the fee, and as a record of tax events).\n\n"
+               f"{src('sip/engine.py', 'h = w * h.sum()')}\n"
+               "After the trades every jar is exactly at its target share.")
+    else:
+        reb = ("The rule is `\"band\"`, so the second test runs every month:\n\n"
+               f"{src('sip/engine.py', 'do_rebal = np.abs(h / h.sum() - w).max() > strategy.band')}\n"
+               "Work out each jar's actual share (`h / h.sum()`), subtract its target (`w`), ignore "
+               "the sign (`abs`) and take the biggest gap (`max`). Only if that gap is more than 5 "
+               "percentage points does the code sell and rebuy to the target (the same trade lines "
+               "as a yearly rebalance). In this strategy the smart instalments kept every jar close "
+               "enough that this **never happened** in 119 months.")
+    return f"""Each numbered block is one or more lines of `sip/engine.py`, in the order they run.
+
+**Before the first month (set-up):**
+
+{src("sip/engine.py", "targets = strategy.target.reindex(idx)[returns.columns].values")}
+Line up this strategy's target split for every SIP month.
+
+{src("sip/engine.py", "h = np.zeros(n_a)")}
+Start with three empty jars: `h = [0, 0, 0]` (Nifty, Gold, Liquid).
+
+{src("sip/engine.py", "for t in range(n_t):")}
+Now repeat everything below once per month, 119 times (`t` = 0 is Feb 2010, `t` = 118 is Dec 2019).
+
+**① Read this month's plan**
+
+{src("sip/engine.py", "w = targets[t]")}
+{src("sip/engine.py", "cash = contributions.iloc[t]")}
+`w` is this month's target split; `cash` is this month's instalment (₹10,000).
+
+**② Decide how to split the instalment**
+
+{src("sip/engine.py", 'split = _smart_split(h, w, cash) if strategy.contribution == "smart" else w * cash')}
+{split_expl}
+
+**③ Put the money in the jars**
+
+{src("sip/engine.py", "h = h + split")}
+Each jar gets its share of the instalment added.
+
+**④ Rebalance?**
+
+{src("sip/engine.py", 'if strategy.rebalance == "calendar" and months_since_rebal >= strategy.rebalance_every:')}
+{src("sip/engine.py", 'elif strategy.rebalance == "band" and h.sum() > 0:')}
+{reb}
+
+**⑤ Pay the fee**
+
+{src("sip/engine.py", "turnover = np.maximum(buys, 0.0).sum() + sold[t]")}
+{src("sip/engine.py", "costs[t] = turnover * cost_rate")}
+Add up every rupee bought or sold this month and charge 0.1% of it.
+
+{src("sip/engine.py", "start_value = h.sum()")}
+Remember the pot's value *before* the fee: it is the starting point for this month's return.
+
+{src("sip/engine.py", "h = h * (1.0 - costs[t] / start_value)")}
+Take the fee out of all jars in proportion to their size.
+
+**⑥ Let the market move, then write it down**
+
+{src("sip/engine.py", "h = h * (1.0 + rets[t])")}
+Every jar is multiplied by (1 + that asset's return this month). A +3% month turns ₹100 into
+₹103; a −3% month turns it into ₹97. The *whole* jar moves, old money and new money alike.
+
+{src("sip/engine.py", "twr[t] = h.sum() / start_value - 1.0")}
+The strategy's own return this month = value at the end ÷ value at the start − 1.
+
+Then the loop goes back to ① for the next month."""
+
+
+def walkthrough(key: int) -> str:
+    s = STRATS[key]
+    res = RESULTS[s.name]
+    tgt, contrib, reb = SWITCH_TEXT[key]
+    gloss = GLOSSARY
+    if s.contribution == "smart":
+        gloss += "\n" + EXTRA_GLOSSARY["smart"]
+    if s.rebalance == "band":
+        gloss += "\n" + EXTRA_GLOSSARY["band"]
+    if key >= 3:
+        gloss += "\n" + EXTRA_GLOSSARY["opt"]
+    months = [0, 1]
+    notes = {}
+    if key == 0:
+        months.append(IDX.get_loc(pd.Period("2010-05", "M")))
+        notes[months[-1]] = "A **falling** month: the market return is negative, so every rupee in the jar shrinks."
+    elif key == 1:
+        t = IDX.get_loc(pd.Period("2011-11", "M"))
+        months.append(t)
+        notes[t] = ("The month the split had **drifted furthest** from ⅓ each. There is no rebalancing "
+                    "rule, so nothing is done about it: new money keeps going in ⅓ each.")
+    elif key == 2:
+        t = IDX.get_loc(pd.Period("2011-01", "M"))
+        months.append(t)
+        notes[t] = ("The **12th month**, so the yearly rebalance happens: jars that grew too big are "
+                    "trimmed and the money moved into the jars that fell behind.")
+    else:
+        t1 = IDX.get_loc(pd.Period("2011-02", "M"))
+        t2 = IDX.get_loc(pd.Period("2013-08", "M"))
+        months += [t1, t2]
+        old = s.target.loc["2010-02"].values
+        new = s.target.loc["2011-02"].values
+        notes[t1] = ("**February**: the optimiser recalculates the target from the 120 months Feb 2001 – "
+                     "Jan 2011. Last year's target was " + " / ".join(f"{a} {P(x)}" for a, x in zip(ASSETS, old))
+                     + "; the new one is " + " / ".join(f"{a} {P(x)}" for a, x in zip(ASSETS, new))
+                     + ". The smart instalment then sends more money to whichever jar is now below the "
+                     "new target, so no selling is needed.")
+        notes[t2] = ("The month the split drifted **furthest** from target (the 2013 rupee crash: "
+                     "gold jumped, Nifty fell). Drift was still under 5%, so the band rule did **not** sell anything.")
+    examples = []
+    for t in months:
+        m = trace_month(s, res, t)
+        head = f"### {month_name(m['month'])} (month {t + 1} of 119)"
+        target = "Target this month: " + " / ".join(f"{a} {P(x)}" for a, x in zip(ASSETS, m["w"])) + "."
+        note = notes.get(t, "")
+        if t == 0:
+            note = "The very first month: all three jars start empty."
+        elif t == 1:
+            note = ("The second month: last month's money is still in the jars, so this month's "
+                    "market move applies to **both** instalments.")
+        examples.append(f"{head}\n\n{note}\n\n{target}\n\n{ledger(s, m)}\n")
+    final = res.total.iloc[-1]
+    end_w = res.weights.iloc[-1]
+    return f"""# How the SIP engine runs Strategy {key + 1}: {STRATEGY_TEXT[key]['title']}
+
+This page follows the computer, step by step, as it runs this strategy. No finance or coding
+background is needed: every word is explained, every line of code is shown with what it does,
+and the end of the page works through real months with real rupee amounts.
+
+## 1. Words used on this page
+
+{gloss}
+
+## 2. The big picture
+
+Think of **three jars** (Nifty, Gold, Liquid). On the 1st of every month from Feb 2010 to
+Dec 2019 the computer:
+
+1. takes ₹10,000,
+2. decides how much goes into each jar,
+3. maybe moves money between jars,
+4. pays a small fee,
+5. lets the market make each jar grow or shrink for a month,
+6. writes everything down,
+
+and then does it again, 119 times. The same engine (`sip/engine.py`) runs all six strategies;
+only three **switches** differ. For this strategy they are set like this:
+
+| Switch | This strategy |
+|---|---|
+| Where the target split comes from | {tgt} |
+| How each instalment is split | {contrib} |
+| When money is moved between jars | {reb} |
+
+## 3. Where the target split comes from
+
+{target_steps(key)}
+
+## 4. What the engine does every month, line by line
+
+{engine_steps(s)}
+
+## 5. Real numbers, month by month
+
+Each table follows one month through the steps above. Columns are the three jars; each row is
+what the jars look like after that step. Every number comes from the engine itself (the same
+values are in `results/monthly.csv`, which opens in Excel).
+
+{chr(10).join(examples)}
+
+## 6. After 119 months
+
+Repeating this 119 times, **{M(len(IDX) * AMOUNT)}** paid in became **{M(final)}** by Dec 2019
+(XIRR {P(sip_xirr(res))} a year). The jars ended at
+{", ".join(f"{a} {M(res.values.iloc[-1][a])} ({P(end_w[a])})" for a in ASSETS)}.
+
+**Run it yourself:** `python {STRATEGY_FOLDERS[key]}/strategy.py` prints the final line and
+rewrites `results/`. Open `results/monthly.csv` to check any month in this page.
+"""
+
+
 def main():
     (ROOT / "00_raw_data" / "README.md").write_text(data_readme(), encoding="utf-8")
     (ROOT / "docs" / "WORKED_EXAMPLE.md").write_text(worked_example(), encoding="utf-8")
     for k, folder in enumerate(STRATEGY_FOLDERS):
         (ROOT / folder / "README.md").write_text(strategy_readme(k), encoding="utf-8")
+        (ROOT / folder / "ENGINE_WALKTHROUGH.md").write_text(walkthrough(k), encoding="utf-8")
     (ROOT / "07_comparison" / "README.md").write_text(comparison_readme(), encoding="utf-8")
     (ROOT / "README.md").write_text(top_readme(), encoding="utf-8")
     print("READMEs regenerated.")
