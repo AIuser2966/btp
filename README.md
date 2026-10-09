@@ -21,6 +21,8 @@ rule in `strategy.py`, and its own `results/`.**
 | [`05_max_sharpe_sip/`](05_max_sharpe_sip) | Strategy 5: **max Sharpe**, an optimiser that maximises return per unit of risk |
 | [`06_optimized_sip/`](06_optimized_sip) | Strategy 6: **Optimized SIP**, the average of 4 and 5 |
 | [`07_comparison/`](07_comparison) | **All six side by side**, robustness tests and the conclusion |
+| [`08_forward_test/`](08_forward_test) | **Forward look:** data extended to Dec 2025 (cross-checked), all six + a **fixed optimiser** tested on 2020–2025, and what an investor starting in Jan 2026 could expect |
+| [`09_investor_tool/`](09_investor_tool) | **Investor tool:** this month's split for a real investor (first version, command line) |
 | [`sip/`](sip) | Shared engine used by all six: monthly SIP simulator, optimisers, scoring |
 | [`tests/`](tests) | Automated checks (formulas, no look-ahead, data integrity) |
 | [`docs/`](docs) | Architecture diagram and the 20-step worked example |
@@ -48,6 +50,25 @@ cash: Liquid barely moves, so the optimisers, which measure risk against a 0% ra
 to the 70% cap. They had tiny falls but earned only a little more than cash. Details:
 [`07_comparison/`](07_comparison).
 
+## Forward look: 2020–2025, data the rules never saw ([`08_forward_test/`](08_forward_test))
+
+₹10,000/month, Jan 2020 – Dec 2025 (₹7.2 lakh invested). 6b fixes the optimiser's flaw (Liquid
+held at a fixed 10%, chosen on 2010–2019 only):
+
+| Strategy | Final value | Return/yr (XIRR) | Max drawdown | Sharpe vs Liquid |
+|---|---|---|---|---|
+| 1 · 100% Nifty | ₹1,138,663 | 15.1% | -28.2% | 0.55 |
+| 2 · ⅓ each | ₹1,201,678 | 16.9% | -6.8% | 1.18 |
+| 3 · 60/20/20 | ₹1,168,631 | 16.0% | -15.4% | 0.83 |
+| 4 · Risk parity | ₹1,010,664 | 11.2% | -3.0% | 1.16 |
+| 5 · Max Sharpe | ₹1,008,323 | 11.1% | -3.2% | 1.13 |
+| 6 · Optimized | ₹1,009,149 | 11.1% | -3.1% | 1.14 |
+| 6b · Fixed Optimized | ₹1,328,220 | 20.3% | -12.2% | 1.09 |
+
+**Out-of-sample winner (rule set in advance: best Sharpe vs Liquid): Equal-weight SIP.** Highest
+return: Fixed Optimized SIP. Gold's 2020–2025 boom (+21%/yr in rupees) helped every gold-holding mix.
+The investor tool ([`09_investor_tool/`](09_investor_tool)) uses the winner by default.
+
 ## Run it
 
 ```bash
@@ -56,8 +77,8 @@ python run_all.py            # rebuilds data, all six strategies, the comparison
 python -m pytest -q          # automated checks
 ```
 
-`python 06_optimized_sip/recommend.py --amount 10000` prints the Optimized SIP's split for the
-next instalment (from the latest data, Dec 2019).
+`python 09_investor_tool/invest.py --amount 10000 --holdings NIFTY GOLD LIQUID` prints this
+month's split for an investor today (data to Dec 2025). See [`09_investor_tool/`](09_investor_tool).
 
 ## Architecture
 

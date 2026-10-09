@@ -64,7 +64,7 @@ def walk_forward_weights(rets: pd.DataFrame, method: str, lookback: int = 120,
     ``lookback`` months of returns. Months without a full look-back window
     get NaN weights (strategies must not start before then).
     """
-    fn = OPTIMISERS[method]
+    fn = OPTIMISERS[method] if isinstance(method, str) else method
     out = pd.DataFrame(np.nan, index=rets.index, columns=rets.columns)
     current = None
     for i in range(len(rets)):
@@ -74,6 +74,26 @@ def walk_forward_weights(rets: pd.DataFrame, method: str, lookback: int = 120,
             current = fn(rets.iloc[i - lookback:i], lo=lo, hi=hi)
         out.iloc[i] = current
     return out
+
+
+def optimized_cash_buffer(rets: pd.DataFrame, lo: float = 0.10, hi: float = 0.70,
+                          liquid: float = 0.20, cash: str = "Liquid") -> np.ndarray:
+    """Fixed Optimized SIP: Liquid is treated as cash, not as an asset to optimise.
+
+    Liquid gets a fixed share ``liquid``. The rest is split between the risky assets by
+    ½ risk parity + ½ max Sharpe, where max Sharpe uses returns ABOVE Liquid
+    (mean(r_i - r_Liquid)), so cash can no longer look like a free lunch.
+    Each risky asset stays between ``lo`` and ``hi`` of the WHOLE portfolio.
+    """
+    risky = [c for c in rets.columns if c != cash]
+    sleeve = 1.0 - liquid
+    lo_s, hi_s = lo / sleeve, min(hi / sleeve, 1.0 - lo / sleeve)
+    excess_mu = (rets[risky].sub(rets[cash], axis=0)).mean().values
+    rp = risk_parity(rets[risky], lo_s, hi_s)
+    ms = max_sharpe_mu(excess_mu, rets[risky].cov().values, lo_s, hi_s)
+    w = dict(zip(risky, sleeve * (0.5 * rp + 0.5 * ms)))
+    w[cash] = liquid
+    return np.array([w[c] for c in rets.columns])
 
 
 def weight_grid(assets: list[str], step: float = 0.10, lo: float = 0.0,

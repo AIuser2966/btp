@@ -913,6 +913,15 @@ def top_readme() -> str:
     rows = "\n".join(
         f"| {labels[k]} | {M(t.loc[n, 'Final value'])} | {P(t.loc[n, 'XIRR'])} | "
         f"{P(t.loc[n, 'Max drawdown'])} | {t.loc[n, 'Sharpe vs Liquid']:.2f} |" for k, n in enumerate(names))
+    f_path = ROOT / "08_forward_test" / "results" / "summary_2020_2025.csv"
+    fwd_rows, fwd_win, fwd_top = "", "", ""
+    if f_path.exists():
+        f = pd.read_csv(f_path, index_col=0)
+        flabels = labels + ["6b · Fixed Optimized"]
+        fwd_rows = "\n".join(
+            f"| {flabels[k]} | {M(f.loc[n, 'Final value'])} | {P(f.loc[n, 'XIRR'])} | "
+            f"{P(f.loc[n, 'Max drawdown'])} | {f.loc[n, 'Sharpe vs Liquid']:.2f} |" for k, n in enumerate(f.index))
+        fwd_win, fwd_top = f["Sharpe vs Liquid"].idxmax(), f["XIRR"].idxmax()
     return f"""# A Simple Optimized SIP Strategy for Multi-Asset Allocation
 
 Degree project (BTP). A **SIP** (Systematic Investment Plan) invests a fixed amount every
@@ -936,6 +945,8 @@ rule in `strategy.py`, and its own `results/`.**
 | [`05_max_sharpe_sip/`](05_max_sharpe_sip) | Strategy 5: **max Sharpe**, an optimiser that maximises return per unit of risk |
 | [`06_optimized_sip/`](06_optimized_sip) | Strategy 6: **Optimized SIP**, the average of 4 and 5 |
 | [`07_comparison/`](07_comparison) | **All six side by side**, robustness tests and the conclusion |
+| [`08_forward_test/`](08_forward_test) | **Forward look:** data extended to Dec 2025 (cross-checked), all six + a **fixed optimiser** tested on 2020–2025, and what an investor starting in Jan 2026 could expect |
+| [`09_investor_tool/`](09_investor_tool) | **Investor tool:** this month's split for a real investor (first version, command line) |
 | [`sip/`](sip) | Shared engine used by all six: monthly SIP simulator, optimisers, scoring |
 | [`tests/`](tests) | Automated checks (formulas, no look-ahead, data integrity) |
 | [`docs/`](docs) | Architecture diagram and the 20-step worked example |
@@ -958,6 +969,19 @@ cash: Liquid barely moves, so the optimisers, which measure risk against a 0% ra
 to the 70% cap. They had tiny falls but earned only a little more than cash. Details:
 [`07_comparison/`](07_comparison).
 
+## Forward look: 2020–2025, data the rules never saw ([`08_forward_test/`](08_forward_test))
+
+₹10,000/month, Jan 2020 – Dec 2025 (₹7.2 lakh invested). 6b fixes the optimiser's flaw (Liquid
+held at a fixed 10%, chosen on 2010–2019 only):
+
+| Strategy | Final value | Return/yr (XIRR) | Max drawdown | Sharpe vs Liquid |
+|---|---|---|---|---|
+{fwd_rows}
+
+**Out-of-sample winner (rule set in advance: best Sharpe vs Liquid): {fwd_win}.** Highest
+return: {fwd_top}. Gold's 2020–2025 boom (+21%/yr in rupees) helped every gold-holding mix.
+The investor tool ([`09_investor_tool/`](09_investor_tool)) uses the winner by default.
+
 ## Run it
 
 ```bash
@@ -966,8 +990,8 @@ python run_all.py            # rebuilds data, all six strategies, the comparison
 python -m pytest -q          # automated checks
 ```
 
-`python 06_optimized_sip/recommend.py --amount 10000` prints the Optimized SIP's split for the
-next instalment (from the latest data, Dec 2019).
+`python 09_investor_tool/invest.py --amount 10000 --holdings NIFTY GOLD LIQUID` prints this
+month's split for an investor today (data to Dec 2025). See [`09_investor_tool/`](09_investor_tool).
 
 ## Architecture
 

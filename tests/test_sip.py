@@ -203,3 +203,57 @@ def test_text_files_are_read_and_written_as_utf8():
             if re.search(r"\.(write_text|read_text)\(", line) and "encoding=" not in line:
                 bad.append(f"{f.relative_to(root)}:{n}")
     assert not bad, bad
+
+
+# --------------------------------------------------------------------------- 08 forward test / 09 tool
+def _load(path, name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_forward_data_is_complete_and_joined():
+    from sip.forward_data import combined_returns, forward_returns, fund_returns
+    fwd = forward_returns()
+    assert len(fwd) == 72 and str(fwd.index[0]) == "2020-01" and str(fwd.index[-1]) == "2025-12"
+    assert fwd.notna().all().all() and (fwd.abs() < 0.3).all().all()
+    comb = combined_returns()
+    assert len(comb) == 311 and comb.index.is_monotonic_increasing and comb.index.is_unique
+    # the joined table keeps the original 2000-2019 numbers exactly
+    pd.testing.assert_frame_equal(comb.loc[:"2019-12"], read_returns_table())
+    # cross-check: an independent Nifty tracker agrees month by month
+    kotak = fund_returns()["Kotak_N50ETF"].loc["2020-01":"2025-12"]
+    assert (kotak - fwd["Nifty"]).abs().max() < 0.002
+
+
+def test_fixed_optimizer_holds_liquid_fixed_and_respects_bounds():
+    from sip.optimize import optimized_cash_buffer
+    w = optimized_cash_buffer(read_returns_table().iloc[:120], 0.10, 0.70, liquid=0.10)
+    assert w.sum() == pytest.approx(1) and w[2] == pytest.approx(0.10)
+    assert (w[:2] >= 0.10 - 1e-9).all() and (w[:2] <= 0.70 + 1e-9).all()
+
+
+def test_fixed_optimizer_has_no_look_ahead():
+    from sip.forward_data import combined_returns
+    fo = _load(ROOT / "08_forward_test" / "fixed_optimizer.py", "fixed_opt")
+    old = read_returns_table()
+    a = fo.target(old).loc["2010-02":"2019-12"]
+    b = fo.target(combined_returns()).loc["2010-02":"2019-12"]
+    pd.testing.assert_frame_equal(a, b)          # adding 2020+ data changes nothing before 2020
+
+
+def test_investor_tool_uses_the_backtest_target():
+    from sip.forward_data import read_combined
+    tool = _load(ROOT / "09_investor_tool" / "invest.py", "invest_tool")
+    fo = _load(ROOT / "08_forward_test" / "fixed_optimizer.py", "fixed_opt2")
+    R = read_combined()
+    w_tool, fit_month = tool.target_for(pd.Period("2026-01", freq="M"), R,
+                                        tool.STRATEGIES["fixed-optimized"][1])
+    w_engine = fo.target(R).loc["2025-12"].values      # same Feb 2025 fit is still in force
+    assert str(fit_month) == "2025-02"
+    np.testing.assert_allclose(w_tool, w_engine, atol=1e-9)
