@@ -947,6 +947,7 @@ rule in `strategy.py`, and its own `results/`.**
 | [`07_comparison/`](07_comparison) | **All six side by side**, robustness tests and the conclusion |
 | [`08_forward_test/`](08_forward_test) | **Forward look:** data extended to Dec 2025 (cross-checked), all six + a **fixed optimiser** tested on 2020–2025, and what an investor starting in Jan 2026 could expect |
 | [`09_investor_tool/`](09_investor_tool) | **Investor tool:** this month's split for a real investor (first version, command line) |
+| [`10_max_utility/`](10_max_utility) | **One score for profit and risk:** mean-variance utility U = return above Liquid − (λ/2)·variance, Strategy 7 (Max-Utility SIP), and which approach maximises U for aggressive / moderate / conservative investors |
 | [`sip/`](sip) | Shared engine used by all six: monthly SIP simulator, optimisers, scoring |
 | [`tests/`](tests) | Automated checks (formulas, no look-ahead, data integrity) |
 | [`docs/`](docs) | Architecture diagram and the 20-step worked example |
@@ -980,7 +981,15 @@ held at a fixed 10%, chosen on 2010–2019 only):
 
 **Out-of-sample winner (rule set in advance: best Sharpe vs Liquid): {fwd_win}.** Highest
 return: {fwd_top}. Gold's 2020–2025 boom (+21%/yr in rupees) helped every gold-holding mix.
-The investor tool ([`09_investor_tool/`](09_investor_tool)) uses the winner by default.
+## Which strategy for which investor? ([`10_max_utility/`](10_max_utility))
+
+Each strategy is scored with one number that balances profit and risk, the mean-variance utility
+U = (return above Liquid) − (λ/2) × variance, where λ is the investor's risk aversion (the Lagrange
+multiplier in Markowitz's problem). Out of sample (2020–2025) the Fixed Optimized SIP had the highest U
+for aggressive (λ=2), moderate (λ=4) and conservative (λ=8) investors. Strategy 7, which maximises U
+directly, came 2nd–3rd: optimising on noisy past returns does not guarantee the best realised U.
+The investor tool ([`09_investor_tool/`](09_investor_tool)) asks for the investor's risk profile and
+uses that winner.
 
 ## Run it
 
@@ -990,7 +999,7 @@ python run_all.py            # rebuilds data, all six strategies, the comparison
 python -m pytest -q          # automated checks
 ```
 
-`python 09_investor_tool/invest.py --amount 10000 --holdings NIFTY GOLD LIQUID` prints this
+`python 09_investor_tool/invest.py --amount 10000 --holdings NIFTY GOLD LIQUID --risk moderate` prints this
 month's split for an investor today (data to Dec 2025). See [`09_investor_tool/`](09_investor_tool).
 
 ## Architecture

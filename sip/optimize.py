@@ -96,6 +96,19 @@ def optimized_cash_buffer(rets: pd.DataFrame, lo: float = 0.10, hi: float = 0.70
     return np.array([w[c] for c in rets.columns])
 
 
+def max_utility(rets: pd.DataFrame, lo: float = 0.10, hi: float = 0.70, lam: float = 4.0,
+                cash: str = "Liquid") -> np.ndarray:
+    """Mean-variance utility: maximise  U = w'(mu - mu_cash) - (lam / 2) w' Sigma w   (yearly).
+
+    The Lagrangian form of Markowitz (1952): lam is the risk-aversion multiplier. Returns are
+    measured ABOVE the cash asset (Liquid), so Liquid's share is decided by lam itself
+    (Tobin 1958): a cautious investor (large lam) holds more of it, a bold one (small lam) less.
+    """
+    mu = (rets.sub(rets[cash], axis=0)).mean().values * MONTHS      # yearly excess returns
+    cov = rets.cov().values * MONTHS                                 # yearly covariance
+    return _solve(lambda w: -(w @ mu - 0.5 * lam * (w @ cov @ w)), len(mu), lo, hi)
+
+
 def weight_grid(assets: list[str], step: float = 0.10, lo: float = 0.0,
                 hi: float = 1.0) -> list[dict[str, float]]:
     """All weight combinations on a grid that sum to 1 (used for the in-sample search)."""

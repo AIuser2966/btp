@@ -19,21 +19,29 @@
 1. Note what your three investments are worth today (from your app or statement).
 2. Run:
    ```bash
-   python 09_investor_tool/invest.py --amount 10000 --holdings 120000 95000 40000
+   python 09_investor_tool/invest.py --amount 10000 --holdings 120000 95000 40000 --risk moderate
    ```
-   If you are starting from zero, leave out `--holdings`.
+   If you are starting from zero, leave out `--holdings`. `--risk` is `aggressive`, `moderate`
+   (default) or `conservative`.
 3. Place the buys (and any sells) it prints.
 
 ## Which strategy
 
-`--strategy` chooses the rule. The default is the **out-of-sample winner** from
-[`08_forward_test/`](../08_forward_test).
+**By default the tool picks the strategy for your risk profile.** Each profile has a risk aversion
+λ (aggressive 2, moderate 4, conservative 8). The tool uses the strategy with the highest
+mean-variance utility U = return above Liquid − (λ/2) × variance **on the out-of-sample years
+2020–2025**, read from [`10_max_utility/results/winners.csv`](../10_max_utility/results/winners.csv).
+Today that is the **Fixed Optimized SIP** for all three profiles (see [`10_max_utility/`](../10_max_utility)).
+
+`--strategy` overrides the choice:
 
 | `--strategy` | Rule | 2020–2025 result |
 |---|---|---|
-| `equal-weight` (default) | ⅓ each, never sell | best return per unit of risk (Sharpe vs Liquid 1.18), XIRR 16.9%, worst fall −6.8% |
-| `fixed-optimized` | Liquid 10%; Nifty/Gold re-fitted every February (½ risk parity + ½ max Sharpe vs Liquid); new money fills gaps first; full reset only if drift > 5% | highest return, XIRR 20.3%, worst fall −12.2% |
-| `optimized` | the original Strategy 6 (~70% Liquid) | XIRR 11.1%, worst fall −3.1% |
+| `fixed-optimized` | Liquid 10%; Nifty/Gold re-fitted every February (½ risk parity + ½ max Sharpe vs Liquid); new money fills gaps first; full reset only if drift > 5% | highest U for every profile; XIRR 20.3%, worst fall −12.2% |
+| `equal-weight` | ⅓ each, never sell | best Sharpe vs Liquid (1.18); XIRR 16.9%, worst fall −6.8% |
+| `max-utility` | Strategy 7: maximises U for your λ each February | XIRR 16.2–18.6% depending on λ |
+| `60-20-20` | 60/20/20, reset every January | XIRR 16.0%, worst fall −15.4% |
+| `risk-parity`, `max-sharpe`, `optimized` | Strategies 4–6 (~70% Liquid) | XIRR about 11.1%, worst fall about −3% |
 | `equity` | 100% Nifty | XIRR 15.1%, worst fall −28.2% |
 
 ## Example output

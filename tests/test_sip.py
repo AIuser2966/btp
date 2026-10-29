@@ -257,3 +257,32 @@ def test_investor_tool_uses_the_backtest_target():
     w_engine = fo.target(R).loc["2025-12"].values      # same Feb 2025 fit is still in force
     assert str(fit_month) == "2025-02"
     np.testing.assert_allclose(w_tool, w_engine, atol=1e-9)
+
+
+# --------------------------------------------------------------------------- 10 max utility
+def test_max_utility_lambda_controls_cash_and_respects_bounds():
+    from sip.optimize import max_utility
+    win = read_returns_table().iloc[:120]
+    liquid = []
+    for lam in (1, 4, 16):
+        w = max_utility(win, 0.10, 0.70, lam=lam)
+        assert w.sum() == pytest.approx(1) and (w >= 0.10 - 1e-9).all() and (w <= 0.70 + 1e-9).all()
+        liquid.append(w[2])
+    assert liquid[0] <= liquid[1] + 1e-9 and liquid[1] <= liquid[2] + 1e-9   # more risk-averse -> more Liquid
+    assert liquid[2] > liquid[0] + 0.2
+
+
+def test_utility_score_formula():
+    from sip.metrics import utility_score
+    res = run_sip(flat_returns(0.01), Strategy("s", fixed_weights(IDX, {"Nifty": 1, "Gold": 0,
+                  "Liquid": 0})), contribution_schedule(IDX, 100), cost_bps=0)
+    rf = pd.Series(0.005, index=IDX)
+    # constant returns: no variance, so U is just 12 x (1% - 0.5%)
+    assert utility_score(res, rf, lam=4) == pytest.approx(0.06)
+
+
+def test_tool_risk_profile_maps_to_a_strategy():
+    tool = _load(ROOT / "09_investor_tool" / "invest.py", "invest_tool2")
+    for risk in tool.RISK_LAMBDA:
+        key = tool.strategy_for_risk(risk)
+        assert key == "max-utility" or key in tool.STRATEGIES

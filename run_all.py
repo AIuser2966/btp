@@ -24,6 +24,7 @@ STEPS = [
     ["08_forward_test/run_forward.py"],
     ["08_forward_test/crosscheck.py"],
     ["08_forward_test/outlook_2026.py"],
+    ["10_max_utility/run.py"],
     ["docs/make_readmes.py"],
 ]
 
@@ -33,5 +34,5 @@ ENV = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
 for step in STEPS:
     print(f"\n=== {' '.join(step)}")
     subprocess.run([sys.executable, str(ROOT / step[0]), *step[1:]], check=True, env=ENV,
-                   stdout=subprocess.DEVNULL if step[0].startswith(("07", "08")) else None)
+                   stdout=subprocess.DEVNULL if step[0].startswith(("07", "08", "10")) else None)
 print("\nDone. Results are in each folder's results/ directory.")

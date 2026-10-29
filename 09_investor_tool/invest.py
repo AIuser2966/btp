@@ -2,10 +2,14 @@
 
     python 09_investor_tool/invest.py --amount 10000
     python 09_investor_tool/invest.py --amount 10000 --holdings 120000 95000 40000
-    python 09_investor_tool/invest.py --amount 10000 --holdings 120000 95000 40000 --strategy fixed-optimized
+    python 09_investor_tool/invest.py --amount 10000 --holdings 120000 95000 40000 --risk conservative
+    python 09_investor_tool/invest.py --amount 10000 --holdings 120000 95000 40000 --strategy equal-weight
 
 --holdings are what your Nifty, Gold and Liquid investments are worth today (in rupees).
---strategy defaults to the out-of-sample winner (08_forward_test): equal-weight.
+--risk (aggressive / moderate / conservative, default moderate) sets your risk aversion λ = 2 / 4 / 8;
+the tool then uses the strategy with the highest utility U = return above Liquid − (λ/2)·variance
+on the out-of-sample years 2020-2025 (10_max_utility/results/winners.csv).
+--strategy overrides that choice.
 
 It applies exactly the rules that were back-tested in folders 01-06 and 08: the same target,
 the same way of splitting the instalment, the same rebalancing rule. The data currently ends
@@ -29,7 +33,7 @@ sys.path.insert(0, str(ROOT))
 
 from sip.engine import _smart_split  # noqa: E402
 from sip.forward_data import read_combined  # noqa: E402
-from sip.optimize import max_sharpe, optimized_cash_buffer, risk_parity  # noqa: E402
+from sip.optimize import max_sharpe, max_utility, optimized_cash_buffer, risk_parity  # noqa: E402
 
 ASSETS = ["Nifty", "Gold", "Liquid"]
 LOOKBACK, BAND, LO, HI = 120, 0.05, 0.10, 0.70
@@ -44,7 +48,29 @@ STRATEGIES = {
     "optimized": ("Original Optimized SIP (Strategy 6): ½ risk parity + ½ max Sharpe",
                   lambda win: 0.5 * risk_parity(win, LO, HI) + 0.5 * max_sharpe(win, LO, HI), "smart", "band"),
     "equity": ("Equity SIP (Strategy 1): 100% Nifty", lambda win: np.array([1.0, 0, 0]), "pro_rata", "none"),
+    "60-20-20": ("60/20/20 SIP (Strategy 3)", lambda win: np.array([0.6, 0.2, 0.2]), "pro_rata", "calendar"),
+    "risk-parity": ("Risk-parity SIP (Strategy 4)", lambda win: risk_parity(win, LO, HI), "smart", "band"),
+    "max-sharpe": ("Max-Sharpe SIP (Strategy 5)", lambda win: max_sharpe(win, LO, HI), "smart", "band"),
 }
+RISK_LAMBDA = {"aggressive": 2.0, "moderate": 4.0, "conservative": 8.0}
+WINNERS = ROOT / "10_max_utility" / "results" / "winners.csv"
+# names used in the back-test results -> tool keys
+RESULT_NAMES = {"Equal-weight SIP": "equal-weight", "Fixed Optimized SIP": "fixed-optimized",
+                "Optimized SIP": "optimized", "Equity SIP": "equity", "60/20/20 annual rebal": "60-20-20",
+                "Risk-parity SIP": "risk-parity", "Max-Sharpe SIP": "max-sharpe"}
+
+
+def max_utility_entry(lam: float):
+    return (f"Max-Utility SIP (Strategy 7, λ={lam:g})", lambda win: max_utility(win, LO, HI, lam=lam),
+            "smart", "band")
+
+
+def strategy_for_risk(risk: str) -> str:
+    """The out-of-sample utility winner for this risk profile (key into STRATEGIES or 'max-utility')."""
+    w = pd.read_csv(WINNERS, index_col="Profile")
+    name = w.loc[risk, "Best 2020-2025 (out-of-sample)"]
+    return "max-utility" if name.startswith("Max-Utility") else RESULT_NAMES[name]
+
 
 WHAT_TO_BUY = {"Nifty": "a Nifty 50 index fund or ETF",
                "Gold": "a gold ETF (or gold fund)",
@@ -66,12 +92,17 @@ def main():
     p.add_argument("--amount", type=float, default=10_000, help="this month's SIP amount (₹)")
     p.add_argument("--holdings", type=float, nargs=3, metavar=("NIFTY", "GOLD", "LIQUID"),
                    help="current value of your three investments (₹); leave out if starting fresh")
-    p.add_argument("--strategy", choices=list(STRATEGIES), default="equal-weight")
+    p.add_argument("--risk", choices=list(RISK_LAMBDA), default="moderate",
+                   help="your risk profile; picks the strategy with the best utility for it")
+    p.add_argument("--strategy", choices=list(STRATEGIES) + ["max-utility"],
+                   help="use this strategy instead of the one chosen for your risk profile")
     args = p.parse_args()
 
     rets = read_combined()
     month = rets.index[-1] + 1                       # the instalment we are planning
-    label, fit, contribution, rebalance = STRATEGIES[args.strategy]
+    lam = RISK_LAMBDA[args.risk]
+    key = args.strategy or strategy_for_risk(args.risk)
+    label, fit, contribution, rebalance = max_utility_entry(lam) if key == "max-utility" else STRATEGIES[key]
     w, fit_month = target_for(month, rets, fit)
 
     h = np.array(args.holdings) if args.holdings else np.zeros(3)
@@ -87,11 +118,14 @@ def main():
     for c in shown.columns:
         shown[c] = shown[c].map((lambda v: f"{v:,.0f}") if "₹" in c else (lambda v: f"{v:.1%}"))
 
+    why = ("your choice (--strategy)" if args.strategy else
+           f"highest utility for {'an' if args.risk[0] in 'aeiou' else 'a'} {args.risk} investor (λ={lam:g}) on 2020-2025, 10_max_utility")
     print(f"\nStrategy : {label}")
+    print(f"Chosen as: {why}")
     print(f"Plan for : {month.strftime('%b %Y')} instalment of ₹{args.amount:,.0f}")
     print(f"Data     : month-end returns up to {rets.index[-1].strftime('%b %Y')}"
           + (f"; target fitted in {fit_month.strftime('%b %Y')} on the previous 120 months"
-             if args.strategy in ("fixed-optimized", "optimized") else ""))
+             if key in ("fixed-optimized", "optimized", "risk-parity", "max-sharpe", "max-utility") else ""))
     print()
     print(shown.to_string())
     print()
@@ -104,6 +138,9 @@ def main():
               f"also resets the whole portfolio to the target (selling what is above it).")
     elif rebalance == "band":
         print(f"Rebalance: largest gap from target after buying is {drift:.1%} (≤ 5%): no selling needed.")
+    elif rebalance == "calendar":
+        print("Rebalance: this strategy resets every jar to target once a year, in January "
+              "(sell what is above target, buy what is below).")
     else:
         print("Rebalance: this strategy never sells; only the new instalment is split.")
 

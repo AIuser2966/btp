@@ -75,3 +75,12 @@ def summarise(res: SIPResult, rf: float = 0.0, rf_returns: pd.Series | None = No
 def summary_table(results: list[SIPResult], rf: float = 0.0,
                   rf_returns: pd.Series | None = None) -> pd.DataFrame:
     return pd.DataFrame([summarise(r, rf, rf_returns) for r in results]).set_index("Strategy")
+
+
+def utility_score(res: SIPResult, rf_returns: pd.Series, lam: float) -> float:
+    """Mean-variance utility of a SIP's monthly returns, per year:
+    U = 12 * mean(TWR - r_Liquid) - (lam / 2) * (std(TWR) * sqrt(12))^2."""
+    r = res.twr
+    excess = (r - rf_returns.reindex(r.index)).mean() * MONTHS
+    var = (r.std() * np.sqrt(MONTHS)) ** 2
+    return float(excess - 0.5 * lam * var)
